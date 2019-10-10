@@ -3,6 +3,11 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 const User = require('../models/user');
 
+const multer = require('multer');
+const path = require('path');
+//const DIR = 'Users/janblonde/angularauth/server/downloads/';
+const DIR = './downloads';
+
 // const mongoose = require('mongoose');
 // const db = "mongodb://userjb:pwjb12@ds125342.mlab.com:25342/adb"
 //
@@ -330,5 +335,31 @@ router.get('/special', verifyToken, (req, res) => {
   ]
   res.json(specialEvents)
 })
+
+let storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, DIR);
+    },
+    filename: (req, file, cb) => {
+      cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
+    }
+});
+
+let upload = multer({storage: storage});
+
+router.post('/upload',upload.single('photo'), function (req, res) {
+    if (!req.file) {
+        console.log("No file received");
+        return res.send({
+          success: false
+        });
+
+      } else {
+        console.log('file received');
+        return res.send({
+          success: true
+        })
+      }
+});
 
 module.exports = router;
