@@ -5,6 +5,9 @@ const User = require('../models/user');
 
 const multer = require('multer');
 const path = require('path');
+//const csv = require('csvtojson');
+const csv = require('fast-csv');
+const fs = require('fs');
 //const DIR = 'Users/janblonde/angularauth/server/downloads/';
 const DIR = './downloads';
 
@@ -345,21 +348,61 @@ let storage = multer.diskStorage({
     }
 });
 
-let upload = multer({storage: storage});
+//let upload = multer({storage: storage});
+const upload = multer({ dest: 'uploads/' });
+
+function sleep(milliseconds) {
+  var start = new Date().getTime();
+  for (var i = 0; i < 1e7; i++) {
+    if ((new Date().getTime() - start) > milliseconds){
+      break;
+    }
+  }
+}
 
 router.post('/upload',upload.single('photo'), function (req, res) {
+    console.log('entry');
     if (!req.file) {
-        console.log("No file received");
-        return res.send({
-          success: false
-        });
+      console.log("No file received");
+      return res.send({
+        success: false
+      });
+    }
 
-      } else {
-        console.log('file received');
-        return res.send({
-          success: true
-        })
-      }
-});
+    const fileRows = [];
+
+    // open uploaded file
+    csv.fromPath(req.file.path)
+      .on("data", function (data) {
+        fileRows.push(data); // push each row
+      })
+      .on("end", function () {
+        sleep(3000);
+        console.log(fileRows)
+        fs.unlinkSync(req.file.path);
+        return res.sendStatus(200);   // remove temp file
+        //process "fileRows" and respond
+      });
+
+  });
+
+
+
+    // if(err){
+    //   console.log(req);
+    //   console.log(req.file);
+    //   return res.sendStatus(500);
+    // }
+    // next()},function(req,res,next){
+    //   csv()
+    //     .fromFile(req.file.path)
+    //     .subscribe((json)=>{
+    //       return new Promise((resolve,reject)=>{
+    //         console.log(json);
+    //       })
+    //     })
+    //     return res.sendStatus(200);
+    // }
+// );
 
 module.exports = router;
