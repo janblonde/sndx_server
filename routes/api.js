@@ -11,6 +11,8 @@ const fs = require('fs');
 //const DIR = 'Users/janblonde/angularauth/server/downloads/';
 const DIR = './downloads';
 
+var each = require('async-each');
+
 // const mongoose = require('mongoose');
 // const db = "mongodb://userjb:pwjb12@ds125342.mlab.com:25342/adb"
 //
@@ -33,19 +35,19 @@ const pool = new Pool({
 
 function verifyToken(req, res, next){
   if(!req.headers.authorization){
-    console.log('Unauthorized request');
+    console.log('Unauthorized request 1');
     return res.status(401).send('Unauthorized request')
   }
 
   let token = req.headers.authorization.split(' ')[1]
   if(token === 'null'){
-    console.log('Unauthorized request')
+    console.log('Unauthorized request 2')
     return res.status(401).send('Unauthorized request')
   }
 
   jwt.verify(token, 'secretKey', function(err, decoded){
     if (err) {
-      console.log('Unauthorized request')
+      console.log('Unauthorized request 3')
       return res.status(401).send('Unauthorized request')
     } else {
       //console.log(decoded);
@@ -163,12 +165,13 @@ router.put('/units', verifyToken, (req,res) => {
 
 router.get('/units', verifyToken, (req, res) =>{
   console.log('get units');
+  console.log(req.headers);
 
   let queryString = "SELECT units.id as id, units.naam as naam, units.duizendste as duizendste,"+
                     "partners.naam as eigenaar, partners.id as eigenaarid from units " +
                     "LEFT OUTER JOIN eigendom ON units.id = eigendom.unit " +
                     "LEFT OUTER JOIN partners ON eigendom.eigenaar = partners.id " +
-                    "WHERE units.fk_users = $1"
+                    "WHERE units.fk_users = $1 ORDER BY units.naam";
 
   //'SELECT id,naam, duizendste from units WHERE fk_users = $1'
 
@@ -200,7 +203,7 @@ router.get('/unit', verifyToken, (req, res) =>{
 });
 
 router.post('/eigenaars', verifyToken, (req, res) => {
-  pool.query("INSERT INTO partners (naam, voornaam, bankRNR, email, type) VALUES ($1, $2, $3, $4, 'eigenaar') RETURNING id",
+  pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, type) VALUES ($1, $2, $3, $4, 'eigenaar') RETURNING id",
                 [req.body.naam, req.body.voornaam, req.email, req.body.email], (error, results) => {
                   if(error) {
                     console.log(error);
@@ -229,7 +232,7 @@ router.put('/eigenaars', verifyToken, (req,res) => {
   console.log('put eigenaars');
   console.log(req.body);
 
-  pool.query("UPDATE partners SET naam=$1, voornaam=$2, email=$3, bankRNR=$4 WHERE id=$5 RETURNING id",
+  pool.query("UPDATE partners SET naam=$1, voornaam=$2, email=$3, bankrnr=$4 WHERE id=$5 RETURNING id",
                 [req.body.naam, req.body.voornaam, req.body.email, req.body.bankrnr, req.body.id], (error, results) => {
                   if(error) {
                     console.log(error);
@@ -360,49 +363,69 @@ function sleep(milliseconds) {
   }
 }
 
-router.post('/upload',upload.single('photo'), function (req, res) {
-    console.log('entry');
-    if (!req.file) {
-      console.log("No file received");
-      return res.send({
-        success: false
-      });
-    }
 
-    const fileRows = [];
 
-    // open uploaded file
-    csv.fromPath(req.file.path)
-      .on("data", function (data) {
-        fileRows.push(data); // push each row
-      })
-      .on("end", function () {
-        sleep(3000);
-        console.log(fileRows)
-        fs.unlinkSync(req.file.path);
-        return res.sendStatus(200);   // remove temp file
-        //process "fileRows" and respond
-      });
+    router.post('/upload', upload.single('photo'), verifyToken, async function (req, res) {
+        console.log('entry');
+        if (!req.file) {
+          console.log("No file received");
+          return res.send({
+            success: false
+          });
+        }
+
+        let datatest = [1,2,3,4,5,6,7,8,9,10,11];
+
+        for (const element of datatest){
+          console.log('forEach: ' + element)
+          const result = await pool.query('INSERT INTO bankrekeninguittreksels (bedrag) VALUES ($1) returning Id', [element]);
+          console.log(result);
+          // add(element);
+        }
+
+        const fileRows = []
+        //open uploaded file
+        csv.parseFile(req.file.path, {delimiter:';'})
+          //.pipe(csv.parse({ headers: true }))
+          //.parse({ delimiter: ';' }) 01/34/6789
+          .on("data", async function (data) {
+            //console.log(data);
+            fileRows.push(data);
+
+            //if(rekeningnummers.has(data[0])){
+
+
+              //console.log(data);
+                        // (error, results) => {
+                        //     if(error) {
+                        //       console.log(error);
+                        //     }else{
+                        //       //console.log(results.rows);
+                        //       //res.status(200).send(results);
+                        //     }
+                        //   })
+
+            })
+          .on("end", async function () {
+            for(const data of fileRows){
+
+              if(data[0]==='BE37735049144228'){
+                console.log(data);
+
+                date= data[5].substr(6,4)+'/'+data[5].substr(3,2)+'/'+data[5].substr(0,2);
+
+                let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening) '+
+                                  'VALUES ($1, $2, $3, $4) RETURNING id';
+                const results = await pool.query(queryString,[date,data[8].replace(",","."),data[6].substr(0,299),data[12]])//,
+                console.log(results.rows);
+              }
+            }
+
+            fs.unlinkSync(req.file.path);
+            return res.sendStatus(200);   // remove temp file
+            //process "fileRows" and respond
+          });
 
   });
-
-
-
-    // if(err){
-    //   console.log(req);
-    //   console.log(req.file);
-    //   return res.sendStatus(500);
-    // }
-    // next()},function(req,res,next){
-    //   csv()
-    //     .fromFile(req.file.path)
-    //     .subscribe((json)=>{
-    //       return new Promise((resolve,reject)=>{
-    //         console.log(json);
-    //       })
-    //     })
-    //     return res.sendStatus(200);
-    // }
-// );
 
 module.exports = router;
