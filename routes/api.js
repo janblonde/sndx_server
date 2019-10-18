@@ -25,11 +25,19 @@ var each = require('async-each');
 // })
 
 const Pool = require('pg').Pool
+// const pool = new Pool({
+//   user: 'me',
+//   host: 'localhost',
+//   database: 'api',
+//   password: 'ciFE',
+//   port: 5432,
+// })
+
 const pool = new Pool({
-  user: 'me',
-  host: 'localhost',
+  user: 'sgpostgres',
+  host: 'SG-syndicus-249-pgsql-master.servers.mongodirector.com',
   database: 'api',
-  password: 'ciFE',
+  password: 'FsWaqy4fy!PPnZ1u',
   port: 5432,
 })
 
@@ -165,7 +173,7 @@ router.put('/units', verifyToken, (req,res) => {
 
 router.get('/units', verifyToken, (req, res) =>{
   console.log('get units');
-  console.log(req.headers);
+  //console.log(req.headers);
 
   let queryString = "SELECT units.id as id, units.naam as naam, units.duizendste as duizendste,"+
                     "partners.naam as eigenaar, partners.id as eigenaarid from units " +
@@ -258,89 +266,24 @@ router.get('/eigenaar', verifyToken, (req, res) =>{
 
 });
 
-router.get('/events', (req, res) => {
-  let events = [
-    {
-      "_id": "1",
-      "name": "Auto Expo",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "2",
-      "name": "Auto Expo",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "3",
-      "name": "Auto Expo",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "4",
-      "name": "Auto Expo",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "5",
-      "name": "Auto Expo",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "6",
-      "name": "Auto Expo",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
+router.get('/uittreksels', verifyToken, (req,res)=>{
+  console.log('get uittreksels');
+
+  let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening FROM bankrekeninguittreksels as bu " +
+                    "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
+                    "WHERE br.fk_users = ($1) AND br.type = 'werk';"
+
+  pool.query(queryString, [req.userId], (error, results) => {
+    if(error) {
+      console.log(error)
+    }else{
+      console.log(results.rows);
+      res.status(200).send(results.rows);
     }
-  ]
-  res.json(events)
+  })
 })
 
-router.get('/special', verifyToken, (req, res) => {
-  let specialEvents = [
-    {
-      "_id": "1",
-      "name": "Auto Expo Special",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "2",
-      "name": "Auto Expo Special",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "3",
-      "name": "Auto Expo Special",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "4",
-      "name": "Auto Expo Special",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "5",
-      "name": "Auto Expo Special",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    },
-    {
-      "_id": "6",
-      "name": "Auto Expo Special",
-      "description": "lorem ipsum",
-      "date": "2012-04-23T18:25:43.511Z"
-    }
-  ]
-  res.json(specialEvents)
-})
+//fileupload
 
 let storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -354,78 +297,52 @@ let storage = multer.diskStorage({
 //let upload = multer({storage: storage});
 const upload = multer({ dest: 'uploads/' });
 
-function sleep(milliseconds) {
-  var start = new Date().getTime();
-  for (var i = 0; i < 1e7; i++) {
-    if ((new Date().getTime() - start) > milliseconds){
-      break;
+router.post('/upload', upload.single('photo'), verifyToken, async function (req, res) {
+    console.log('entry');
+    if (!req.file) {
+      console.log("No file received");
+      return res.send({
+        success: false
+      });
     }
-  }
-}
 
+    //get rekeningnummers
+    const result = await pool.query('SELECT id, rekeningnummer FROM bankrekeningen WHERE fk_users = ($1)', [req.userId]);
+    console.log(result.rows);
 
+    rekeningnummers = new Map();
+    if(result.rows){
+      result.rows.forEach((element)=>{
+        rekeningnummers.set(element.rekeningnummer,element.id);
+      })
+    }
+    console.log(rekeningnummers);
 
-    router.post('/upload', upload.single('photo'), verifyToken, async function (req, res) {
-        console.log('entry');
-        if (!req.file) {
-          console.log("No file received");
-          return res.send({
-            success: false
-          });
+    //get partners
+
+    const fileRows = []
+    csv.parseFile(req.file.path, {delimiter:';'})
+      .on("data", async function (data) {
+        fileRows.push(data);
+        })
+      .on("end", async function () {
+        for(const data of fileRows){
+
+          if(rekeningnummers.has(data[0])){
+            console.log(data);
+
+            date= data[5].substr(6,4)+'/'+data[5].substr(3,2)+'/'+data[5].substr(0,2);
+
+            let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening, fk_bankrekening) '+
+                              'VALUES ($1, $2, $3, $4, $5) RETURNING id';
+            const results = await pool.query(queryString,[date,data[8].replace(",","."),data[6].substr(0,299),data[12],rekeningnummers.get(data[0])])//,
+            console.log(results.rows);
+          }
         }
+        fs.unlinkSync(req.file.path);
+        return res.sendStatus(200);
+      });
 
-        let datatest = [1,2,3,4,5,6,7,8,9,10,11];
-
-        for (const element of datatest){
-          console.log('forEach: ' + element)
-          const result = await pool.query('INSERT INTO bankrekeninguittreksels (bedrag) VALUES ($1) returning Id', [element]);
-          console.log(result);
-          // add(element);
-        }
-
-        const fileRows = []
-        //open uploaded file
-        csv.parseFile(req.file.path, {delimiter:';'})
-          //.pipe(csv.parse({ headers: true }))
-          //.parse({ delimiter: ';' }) 01/34/6789
-          .on("data", async function (data) {
-            //console.log(data);
-            fileRows.push(data);
-
-            //if(rekeningnummers.has(data[0])){
-
-
-              //console.log(data);
-                        // (error, results) => {
-                        //     if(error) {
-                        //       console.log(error);
-                        //     }else{
-                        //       //console.log(results.rows);
-                        //       //res.status(200).send(results);
-                        //     }
-                        //   })
-
-            })
-          .on("end", async function () {
-            for(const data of fileRows){
-
-              if(data[0]==='BE37735049144228'){
-                console.log(data);
-
-                date= data[5].substr(6,4)+'/'+data[5].substr(3,2)+'/'+data[5].substr(0,2);
-
-                let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening) '+
-                                  'VALUES ($1, $2, $3, $4) RETURNING id';
-                const results = await pool.query(queryString,[date,data[8].replace(",","."),data[6].substr(0,299),data[12]])//,
-                console.log(results.rows);
-              }
-            }
-
-            fs.unlinkSync(req.file.path);
-            return res.sendStatus(200);   // remove temp file
-            //process "fileRows" and respond
-          });
-
-  });
+});
 
 module.exports = router;
