@@ -211,8 +211,9 @@ router.get('/unit', verifyToken, (req, res) =>{
 });
 
 router.post('/eigenaars', verifyToken, (req, res) => {
-  pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, type, fk_users) VALUES ($1, $2, $3, $4, 'eigenaar', $5) RETURNING id",
-                [req.body.naam, req.body.voornaam, req.email, req.body.email, req.userId], (error, results) => {
+  console.log(req.body);
+  pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, fk_type, fk_users) VALUES ($1, $2, $3, $4, 1, $5) RETURNING id",
+                [req.body.naam, req.body.voornaam, req.body.bankrnr, req.body.email, req.userId], (error, results) => {
                   if(error) {
                     console.log(error);
                   }else{
@@ -319,8 +320,8 @@ router.get('/ongekoppelde_uittreksels', verifyToken, (req,res)=>{
 })
 
 router.post('/partners', verifyToken, (req, res) => {
-  pool.query("INSERT INTO partners (naam, bankrnr, type, fk_users) VALUES ($1, $2, 'leverancier', $3) RETURNING id",
-                [req.body.naam, req.body.rekeningnummer, req.userId], (error, results) => {
+  pool.query("INSERT INTO partners (naam, bankrnr, fk_type, fk_users) VALUES ($1, $2, $3, $4) RETURNING id",
+                [req.body.naam, req.body.rekeningnummer, req.body.type, req.userId], (error, results) => {
                   if(error) {
                     console.log(error);
                   }else{
@@ -344,6 +345,18 @@ router.put('/uittreksels', verifyToken, (req,res) => {
                   }
                 })
 
+})
+
+router.get('/kostentypes', verifyToken, (req,res) => {
+  console.log('kostentypes');
+  pool.query("SELECT id, naam from kosten_types WHERE fk_users = $1 and id>1",
+              [req.userId], (error, results) => {
+                if(error){
+                  console.log(error);
+                }else{
+                  res.status(200).send(results);
+                }
+              })
 })
 
 
