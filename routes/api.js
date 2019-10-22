@@ -25,21 +25,21 @@ var each = require('async-each');
 // })
 
 const Pool = require('pg').Pool
-// const pool = new Pool({
-//   user: 'me',
-//   host: 'localhost',
-//   database: 'api',
-//   password: 'ciFE',
-//   port: 5432,
-// })
-
 const pool = new Pool({
-  user: 'sgpostgres',
-  host: 'SG-syndicus-249-pgsql-master.servers.mongodirector.com',
+  user: 'me',
+  host: 'localhost',
   database: 'api',
-  password: 'FsWaqy4fy!PPnZ1u',
+  password: 'ciFE',
   port: 5432,
 })
+
+// const pool = new Pool({
+//   user: 'sgpostgres',
+//   host: 'SG-syndicus-249-pgsql-master.servers.mongodirector.com',
+//   database: 'api',
+//   password: 'FsWaqy4fy!PPnZ1u',
+//   port: 5432,
+// })
 
 function verifyToken(req, res, next){
   if(!req.headers.authorization){
@@ -211,8 +211,8 @@ router.get('/unit', verifyToken, (req, res) =>{
 });
 
 router.post('/eigenaars', verifyToken, (req, res) => {
-  pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, type) VALUES ($1, $2, $3, $4, 'eigenaar') RETURNING id",
-                [req.body.naam, req.body.voornaam, req.email, req.body.email], (error, results) => {
+  pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, type, fk_users) VALUES ($1, $2, $3, $4, 'eigenaar', $5) RETURNING id",
+                [req.body.naam, req.body.voornaam, req.email, req.body.email, req.userId], (error, results) => {
                   if(error) {
                     console.log(error);
                   }else{
@@ -283,8 +283,72 @@ router.get('/uittreksels', verifyToken, (req,res)=>{
   })
 })
 
-//fileupload
+router.get('/uittreksel', verifyToken, (req,res)=>{
+  console.log('get uittreksel');
+  console.log(req.query.id);
 
+  let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, bu.omschrijving FROM bankrekeninguittreksels as bu " +
+                    "WHERE bu.id = ($1);"
+
+  pool.query(queryString, [req.query.id], (error, results) => {
+    if(error) {
+      console.log(error)
+    }else{
+      console.log(results.rows);
+      res.status(200).send(results.rows);
+    }
+  })
+})
+
+router.get('/ongekoppelde_uittreksels', verifyToken, (req,res)=>{
+  console.log('get ongekoppelde uittreksels');
+
+  let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, bu.omschrijving " +
+                    "FROM bankrekeninguittreksels as bu " +
+                    "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
+                    "WHERE br.fk_users = ($1) AND br.type = 'werk' AND bu.fk_partner is Null;"
+
+  pool.query(queryString, [req.userId], (error, results) => {
+    if(error) {
+      console.log(error)
+    }else{
+      console.log(results.rows);
+      res.status(200).send(results.rows);
+    }
+  })
+})
+
+router.post('/partners', verifyToken, (req, res) => {
+  pool.query("INSERT INTO partners (naam, bankrnr, type, fk_users) VALUES ($1, $2, 'leverancier', $3) RETURNING id",
+                [req.body.naam, req.body.rekeningnummer, req.userId], (error, results) => {
+                  if(error) {
+                    console.log(error);
+                  }else{
+                    console.log(results);
+                    res.status(200).send(results);
+                  }
+                })
+})
+
+router.put('/uittreksels', verifyToken, (req,res) => {
+  console.log('put uittreksels');
+  console.log(req.body);
+
+
+  pool.query("UPDATE bankrekeninguittreksels SET fk_partner=$1 WHERE tegenrekening=$2",
+                [req.body.id, req.body.rekeningnummer], (error, results) => {
+                  if(error) {
+                    console.log(error);
+                  }else{
+                    res.status(200).send(results);
+                  }
+                })
+
+})
+
+
+
+//fileupload
 let storage = multer.diskStorage({
     destination: (req, file, cb) => {
       cb(null, DIR);
@@ -308,7 +372,6 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
 
     //get rekeningnummers
     const result = await pool.query('SELECT id, rekeningnummer FROM bankrekeningen WHERE fk_users = ($1)', [req.userId]);
-    console.log(result.rows);
 
     rekeningnummers = new Map();
     if(result.rows){
@@ -316,27 +379,45 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
         rekeningnummers.set(element.rekeningnummer,element.id);
       })
     }
-    console.log(rekeningnummers);
 
-    //get partners
+    //get partners: fk's en types
+    const p_result = await pool.query('SELECT id, type, bankrnr FROM partners WHERE fk_users = ($1)', [req.userId]);
+
+    p_rekeningnummers = new Map();
+    if(p_result.rows){
+      p_result.rows.forEach((element)=>{
+        p_rekeningnummers.set(element.bankrnr,element.id);
+      })
+    }
+
+    p_types = new Map();
+    if(p_result.rows){
+      p_result.rows.forEach((element)=>{
+        p_types.set(element.bankrnr,element.type);
+      })
+    }
 
     const fileRows = []
     csv.parseFile(req.file.path, {delimiter:';'})
       .on("data", async function (data) {
         fileRows.push(data);
-        })
+      })
       .on("end", async function () {
         for(const data of fileRows){
 
           if(rekeningnummers.has(data[0])){
-            console.log(data);
 
             date= data[5].substr(6,4)+'/'+data[5].substr(3,2)+'/'+data[5].substr(0,2);
 
-            let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening, fk_bankrekening) '+
-                              'VALUES ($1, $2, $3, $4, $5) RETURNING id';
-            const results = await pool.query(queryString,[date,data[8].replace(",","."),data[6].substr(0,299),data[12],rekeningnummers.get(data[0])])//,
-            console.log(results.rows);
+            let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening, fk_bankrekening, fk_partner, type) '+
+                              'VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id';
+            const results = await pool.query(queryString,[date,
+                                                          data[8].replace(",","."),
+                                                          data[6].substr(0,299),
+                                                          data[12],
+                                                          rekeningnummers.get(data[0]),
+                                                          p_rekeningnummers.get(data[12]),
+                                                          p_types.get(data[12])])//,
           }
         }
         fs.unlinkSync(req.file.path);
