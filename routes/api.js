@@ -359,6 +359,49 @@ router.get('/kostentypes', verifyToken, (req,res) => {
               })
 })
 
+router.get('/facturen', verifyToken, (req,res) => {
+  console.log('facturen');
+
+  let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fk_uittreksel "+
+                    "FROM facturen as fa "+
+                    "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
+                    "WHERE fa.fk_users = $1";
+  pool.query(queryString, [req.userId], (error, results) => {
+                if(error){
+                  console.log(error);
+                }else{
+                  res.status(200).send(results.rows);
+                }
+              })
+})
+
+router.post('/facturen', verifyToken, (req,res) => {
+  console.log(req.body);
+
+  pool.query("INSERT INTO facturen (bedrag, omschrijving, fk_partner, fk_users) VALUES ($1, $2, $3, $4) RETURNING id",
+                [req.body.bedrag, req.body.omschrijving, req.body.fk_partner, req.userId], (error, results) => {
+                  if(error) {
+                    console.log(error);
+                  }else{
+                    console.log(results);
+                    res.status(200).send(results);
+                  }
+                })
+})
+
+
+router.get('/leveranciers', verifyToken, (req,res) => {
+  console.log('leveranciers');
+  pool.query("SELECT id, naam FROM partners WHERE fk_users = $1 and fk_type>1",
+              [req.userId], (error, results) => {
+                if(error){
+                  console.log(error);
+                }else{
+                  res.status(200).send(results.rows);
+                }
+              })
+})
+
 
 
 //fileupload
