@@ -25,21 +25,21 @@ var each = require('async-each');
 // })
 
 const Pool = require('pg').Pool
-const pool = new Pool({
-  user: 'me',
-  host: 'localhost',
-  database: 'api',
-  password: 'ciFE',
-  port: 5432,
-})
-
 // const pool = new Pool({
-//   user: 'sgpostgres',
-//   host: 'SG-syndicus-249-pgsql-master.servers.mongodirector.com',
+//   user: 'me',
+//   host: 'localhost',
 //   database: 'api',
-//   password: 'FsWaqy4fy!PPnZ1u',
+//   password: 'ciFE',
 //   port: 5432,
 // })
+
+const pool = new Pool({
+  user: 'postgres',
+  host: 'ec2-35-156-15-195.eu-central-1.compute.amazonaws.com',
+  database: 'api',
+  password: 'coPRbi51',
+  port: 5432,
+})
 
 function verifyToken(req, res, next){
   if(!req.headers.authorization){
@@ -321,7 +321,7 @@ router.get('/ongekoppelde_uittreksels', verifyToken, (req,res)=>{
 
 router.post('/partners', verifyToken, (req, res) => {
   pool.query("INSERT INTO partners (naam, bankrnr, fk_type, fk_users) VALUES ($1, $2, $3, $4) RETURNING id",
-                [req.body.naam, req.body.rekeningnummer, req.body.type, req.userId], (error, results) => {
+                [req.body.naam, req.body.rekeningnummer, req.body.fk_type, req.userId], (error, results) => {
                   if(error) {
                     console.log(error);
                   }else{
@@ -394,7 +394,7 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
     }
 
     //get partners: fk's en types
-    const p_result = await pool.query('SELECT id, type, bankrnr FROM partners WHERE fk_users = ($1)', [req.userId]);
+    const p_result = await pool.query('SELECT id, fk_type, bankrnr FROM partners WHERE fk_users = ($1)', [req.userId]);
 
     p_rekeningnummers = new Map();
     if(p_result.rows){
@@ -406,7 +406,7 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
     p_types = new Map();
     if(p_result.rows){
       p_result.rows.forEach((element)=>{
-        p_types.set(element.bankrnr,element.type);
+        p_types.set(element.bankrnr,element.fk_type);
       })
     }
 
@@ -422,7 +422,7 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
 
             date= data[5].substr(6,4)+'/'+data[5].substr(3,2)+'/'+data[5].substr(0,2);
 
-            let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening, fk_bankrekening, fk_partner, type) '+
+            let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening, fk_bankrekening, fk_partner, fk_type) '+
                               'VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id';
             const results = await pool.query(queryString,[date,
                                                           data[8].replace(",","."),
