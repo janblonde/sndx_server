@@ -35,7 +35,7 @@ const Pool = require('pg').Pool
 
 const pool = new Pool({
   user: 'postgres',
-  host: 'ec2-35-156-15-195.eu-central-1.compute.amazonaws.com',
+  host: 'ec2-18-196-181-249.eu-central-1.compute.amazonaws.com',
   database: 'api',
   password: 'coPRbi51',
   port: 5432,
@@ -267,14 +267,31 @@ router.get('/eigenaar', verifyToken, (req, res) =>{
 
 });
 
+router.get('/eigenaars', verifyToken, (req, res) =>{
+  console.log('get eigenaars');
+  console.log(req.userId);
+
+  pool.query('SELECT id, naam, voornaam, email, bankrnr from partners WHERE fk_users = $1 AND fk_type=1', [req.userId], (error, results) => {
+    if(error) {
+      console.log(error)
+    }else{
+      console.log(results);
+      res.status(200).send(results.rows);
+    }
+  })
+
+});
+
 router.get('/uittreksels', verifyToken, (req,res)=>{
   console.log('get uittreksels');
 
-  let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening FROM bankrekeninguittreksels as bu " +
+  let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type, bu.fk_factuur as factuur FROM bankrekeninguittreksels as bu " +
                     "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
-                    "WHERE br.fk_users = ($1) AND br.type = 'werk';"
+                    "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
+                    "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
+                    "WHERE br.fk_users = ($1) AND br.type = ($2);"
 
-  pool.query(queryString, [req.userId], (error, results) => {
+  pool.query(queryString, [req.userId,req.query.type], (error, results) => {
     if(error) {
       console.log(error)
     }else{
@@ -336,8 +353,8 @@ router.put('/uittreksels', verifyToken, (req,res) => {
   console.log(req.body);
 
 
-  pool.query("UPDATE bankrekeninguittreksels SET fk_partner=$1 WHERE tegenrekening=$2",
-                [req.body.id, req.body.rekeningnummer], (error, results) => {
+  pool.query("UPDATE bankrekeninguittreksels SET fk_partner=$1, fk_type=$2 WHERE tegenrekening=$3",
+                [req.body.id, req.body.fk_type, req.body.rekeningnummer], (error, results) => {
                   if(error) {
                     console.log(error);
                   }else{
@@ -365,7 +382,7 @@ router.get('/facturen', verifyToken, (req,res) => {
   let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fk_uittreksel "+
                     "FROM facturen as fa "+
                     "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
-                    "WHERE fa.fk_users = $1";
+                    "WHERE fa.fk_users = $1 and fa.type='leverancier'";
   pool.query(queryString, [req.userId], (error, results) => {
                 if(error){
                   console.log(error);
@@ -375,18 +392,46 @@ router.get('/facturen', verifyToken, (req,res) => {
               })
 })
 
-router.post('/facturen', verifyToken, (req,res) => {
+router.get('/voorschotten', verifyToken, (req,res) => {
+  console.log('facturen');
+
+  let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fk_uittreksel "+
+                    "FROM facturen as fa "+
+                    "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
+                    "WHERE fa.fk_users = $1 and fa.type='voorschot'";
+  pool.query(queryString, [req.userId], (error, results) => {
+                if(error){
+                  console.log(error);
+                }else{
+                  res.status(200).send(results.rows);
+                }
+              })
+})
+
+router.post('/facturen', verifyToken, async function (req,res){
   console.log(req.body);
 
-  pool.query("INSERT INTO facturen (bedrag, omschrijving, fk_partner, fk_users) VALUES ($1, $2, $3, $4) RETURNING id",
-                [req.body.bedrag, req.body.omschrijving, req.body.fk_partner, req.userId], (error, results) => {
-                  if(error) {
-                    console.log(error);
-                  }else{
-                    console.log(results);
-                    res.status(200).send(results);
-                  }
-                })
+  factuurID = null;
+
+  const results1 = await pool.query("INSERT INTO facturen (bedrag, omschrijving, fk_partner, fk_users, type) VALUES ($1, $2, $3, $4,'leverancier') RETURNING id",
+                [req.body.bedrag, req.body.omschrijving, req.body.fk_partner, req.userId]);
+
+  factuurID = results1.rows[0].id;
+
+  const results2 = await pool.query("SELECT id FROM bankrekeninguittreksels WHERE fk_factuur IS NULL and fk_partner = $1 and bedrag = $2",
+              [req.body.fk_partner, req.body.bedrag]);
+
+  if(results2.rows[0]){
+
+    const results3 = await pool.query("UPDATE facturen SET fk_uittreksel = $1 WHERE id = $2",
+              [results2.rows[0].id, factuurID]);
+
+    const results4 = await pool.query("UPDATE bankrekeninguittreksels SET fk_factuur = $1 WHERE id = $2",
+              [factuurID, results2.rows[0].id]);
+  }
+
+  res.status(200).send(results2);
+
 })
 
 
@@ -465,8 +510,8 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
 
             date= data[5].substr(6,4)+'/'+data[5].substr(3,2)+'/'+data[5].substr(0,2);
 
-            let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening, fk_bankrekening, fk_partner, fk_type) '+
-                              'VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id';
+            let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening, fk_bankrekening, fk_partner, fk_type, fk_factuur) '+
+                              'VALUES ($1, $2, $3, $4, $5, $6, $7, Null) RETURNING id';
             const results = await pool.query(queryString,[date,
                                                           data[8].replace(",","."),
                                                           data[6].substr(0,299),
@@ -474,6 +519,17 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
                                                           rekeningnummers.get(data[0]),
                                                           p_rekeningnummers.get(data[12]),
                                                           p_types.get(data[12])])//,
+
+            //TODO: check of dit een factuur betaald
+            const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM facturen where fk_uittreksel IS NULL and fk_users = $1', [req.userId]);
+
+            for(let element of f_result.rows){
+              if(element.bedrag==data[8].replace(",",".")&&element.fk_partner===p_rekeningnummers.get(data[12])){
+                const results2 = await pool.query('UPDATE bankrekeninguittreksels SET fk_factuur=$1 WHERE id=$2',[element.id,results.rows[0].id]);
+                const results3 = await pool.query('UPDATE facturen SET fk_uittreksel = $1 WHERE id=$2', [results.rows[0].id,element.id]);
+                break;
+              }
+            }
           }
         }
         fs.unlinkSync(req.file.path);
