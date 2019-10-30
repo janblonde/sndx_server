@@ -35,7 +35,7 @@ const Pool = require('pg').Pool
 
 const pool = new Pool({
   user: 'postgres',
-  host: 'ec2-18-196-181-249.eu-central-1.compute.amazonaws.com',
+  host: 'ec2-35-157-5-107.eu-central-1.compute.amazonaws.com',
   database: 'api',
   password: 'coPRbi51',
   port: 5432,
@@ -210,6 +210,7 @@ router.get('/unit', verifyToken, (req, res) =>{
 
 });
 
+
 router.post('/eigenaars', verifyToken, (req, res) => {
   console.log(req.body);
   pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, fk_type, fk_users) VALUES ($1, $2, $3, $4, 1, $5) RETURNING id",
@@ -275,7 +276,6 @@ router.get('/eigenaars', verifyToken, (req, res) =>{
     if(error) {
       console.log(error)
     }else{
-      console.log(results);
       res.status(200).send(results.rows);
     }
   })
@@ -295,7 +295,6 @@ router.get('/uittreksels', verifyToken, (req,res)=>{
     if(error) {
       console.log(error)
     }else{
-      console.log(results.rows);
       res.status(200).send(results.rows);
     }
   })
@@ -445,6 +444,73 @@ router.get('/leveranciers', verifyToken, (req,res) => {
                   res.status(200).send(results.rows);
                 }
               })
+})
+
+router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
+  console.log('werkrekeningrapport');
+  console.log(req.userId);
+
+  let rapport = new Map();
+
+  const result = await pool.query('SELECT id, naam, voornaam, email, bankrnr, overgenomen_saldo_werk '+
+                                  'FROM partners WHERE fk_users = $1 AND fk_type=1', [req.userId]);
+
+  for(let element of result.rows){
+    rapport.set(element.naam,{'voorschotten':0,'uitgaven':0,'saldo':0,'vorig_saldo':parseInt(element.overgenomen_saldo_werk),
+                              'totaal':0,'verdeelsleutel':0});
+  };
+
+  //set verdeelsleuten voor elke eigenaar
+  let queryString = "SELECT units.id as id, units.naam as naam, units.duizendste as duizendste,"+
+                    "partners.naam as eigenaar, partners.id as eigenaarid from units " +
+                    "LEFT OUTER JOIN eigendom ON units.id = eigendom.unit " +
+                    "LEFT OUTER JOIN partners ON eigendom.eigenaar = partners.id " +
+                    "WHERE units.fk_users = $1 ORDER BY units.naam";
+
+  const result2 = await pool.query(queryString, [req.userId]);
+
+  for(let element of result2.rows){
+    let myObj = rapport.get(element.eigenaar);
+    myObj.verdeelsleutel = myObj.verdeelsleutel + element.duizendste
+    rapport.set(element.eigenaar,myObj);
+  };
+
+  //voorschotten en kosten
+  let queryString2 = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type, bu.fk_factuur as factuur FROM bankrekeninguittreksels as bu " +
+                    "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
+                    "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
+                    "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
+                    "WHERE br.fk_users = ($1) AND br.type = 'werk';"
+
+  const result3 = await pool.query(queryString2, [req.userId]);
+
+  for(let element of result3.rows){
+    //console.log(element);
+    //voorschotten
+    if(rapport.get(element.tegenpartij)&&element.type=='voorschot'){
+      let myObj = rapport.get(element.tegenpartij);
+      myObj.voorschotten = myObj.voorschotten+parseInt(element.bedrag)
+      rapport.set(element.tegenpartij,myObj)
+    //kosten
+    }else{
+      //toekennen aan iedere eigenaar
+      rapport.forEach(function(value,key){
+        let verdeling = (element.bedrag*value.verdeelsleutel)/1000;
+        value.uitgaven = value.uitgaven + verdeling
+        rapport.set(key,value);
+      });
+    }
+  }
+
+  rapport.forEach(function(value,key){
+    value.saldo = value.voorschotten + value.uitgaven
+    value.totaal = value.saldo + value.vorig_saldo
+    rapport.set(key,value);
+  })
+
+  console.log(rapport);
+  return res.status(200).send(Array.from(rapport));
+
 })
 
 
