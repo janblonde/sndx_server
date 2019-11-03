@@ -448,7 +448,6 @@ router.get('/leveranciers', verifyToken, (req,res) => {
 
 router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
   console.log('werkrekeningrapport');
-  console.log(req.userId);
 
   let rapport = new Map();
 
@@ -513,7 +512,144 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
 
 })
 
+router.get('/inkomstenrapport', verifyToken, async function(req, res) {
+  console.log('inkomstenrapport');
 
+  let rapport = new Map();
+
+  //get eigenaars
+  const result = await pool.query('SELECT id, naam, voornaam, email, bankrnr, overgenomen_saldo_werk '+
+                                  'FROM partners WHERE fk_users = $1 AND fk_type=1', [req.userId]);
+
+  for(let element of result.rows){
+    rapport.set(element.naam,{'0':0,'1':0,'2':0,'3':0,'4':0,'5':0,
+                              '6':0,'7':0,'8':0,'9':0,'10':0,'11':0,'12':0});
+  };
+
+  //loop over uittreksels
+  let queryString2 = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type, bu.fk_factuur as factuur FROM bankrekeninguittreksels as bu " +
+                    "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
+                    "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
+                    "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
+                    "WHERE br.fk_users = ($1) AND br.type = 'werk';"
+
+  const result2 = await pool.query(queryString2, [req.userId]);
+
+  for(let element of result2.rows){
+    let myDate = new Date(element.datum);
+    let month = myDate.getMonth()
+
+    if(rapport.get(element.tegenpartij)){
+
+      let myObj = rapport.get(element.tegenpartij);
+      myObj[month] = parseInt(myObj[month]) + parseInt(element.bedrag.toString());
+      myObj[12] = myObj[12] + parseInt(element.bedrag.toString());
+
+      rapport.set(element.tegenpartij,myObj);
+    }
+  }
+
+  console.log(rapport);
+  return res.status(200).send(Array.from(rapport));
+
+})
+
+router.get('/uitgavenrapport', verifyToken, async function(req, res) {
+  console.log('uitgavenrapport');
+
+  let rapport = new Map();
+
+  //get eigenaars
+  const result = await pool.query('SELECT id, naam, voornaam, email, bankrnr, overgenomen_saldo_werk '+
+                                  'FROM partners WHERE fk_users = $1 AND fk_type>1', [req.userId]);
+
+  for(let element of result.rows){
+    rapport.set(element.naam,{'0':0,'1':0,'2':0,'3':0,'4':0,'5':0,
+                              '6':0,'7':0,'8':0,'9':0,'10':0,'11':0,'12':0});
+  };
+
+  //loop over uittreksels
+  let queryString2 = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type, bu.fk_factuur as factuur FROM bankrekeninguittreksels as bu " +
+                    "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
+                    "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
+                    "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
+                    "WHERE br.fk_users = ($1) AND br.type = 'werk';"
+
+  const result2 = await pool.query(queryString2, [req.userId]);
+
+  for(let element of result2.rows){
+    let myDate = new Date(element.datum);
+    let month = myDate.getMonth()
+
+    if(rapport.get(element.tegenpartij)){
+
+      let myObj = rapport.get(element.tegenpartij);
+      myObj[month] = parseInt(myObj[month]) + parseInt(element.bedrag.toString());
+      myObj[12] = myObj[12] + parseInt(element.bedrag.toString());
+
+      rapport.set(element.tegenpartij,myObj);
+    }
+  }
+
+  console.log(rapport);
+  return res.status(200).send(Array.from(rapport));
+
+})
+
+router.get('/balans', verifyToken, async function(req, res) {
+  console.log('balans');
+
+  let rapport = {};
+
+  //openstaande voorschotten
+  let queryString = "SELECT facturen.id, facturen.bedrag, partners.naam FROM facturen "+
+                    "LEFT OUTER JOIN partners ON facturen.fk_partner = partners.id "+
+                    "WHERE facturen.fk_users = $1 AND facturen.type='voorschot' AND facturen.fk_uittreksel IS NULL";
+
+  const result = await pool.query(queryString, [req.userId]);
+
+  let vorderingenTotaal = 0
+
+  rapport.vorderingen_detail = []
+
+  for (let element of result.rows){
+    rapport.vorderingen_detail.push({'naam':element.naam,'bedrag':element.bedrag});
+    vorderingenTotaal = vorderingenTotaal + parseInt(element.bedrag);
+  }
+
+  rapport.vorderingen = vorderingenTotaal;
+
+  //bankrekening
+  let queryString2 = "SELECT SUM(bedrag) as som FROM bankrekeninguittreksels AS bu "+
+                    "JOIN bankrekeningen AS br ON bu.fk_bankrekening = br.id "+
+                    "WHERE br.fk_users = $1 AND type = 'werk'";
+
+  const result2 = await pool.query(queryString2, [req.userId]);
+
+  rapport.bank = result2.rows[0].som;
+
+  // let rapport = {'vorderingen': {
+  //                   'totaal':100,
+  //                   'eigenaar1':50,
+  //                   'eigenaar2':50},
+  //                 'bank':250,
+  //                 'leveranciers': {
+  //                   'totaal':500,
+  //                   'leverancier1':400,
+  //                   'leverancier2':100},
+  //                 'teveelontvangen':250
+  //               }
+
+  // let rapport = {
+  //  'vorderingen':500,
+  //  'bank': 400,
+  //  'vorderingen_detail':[{'naam':'test1','bedrag':100},{'naam':'test2','bedrag':200}]
+  // }
+
+  console.log(rapport);
+  return res.status(200).send(rapport);
+
+})
 
 //fileupload
 let storage = multer.diskStorage({
