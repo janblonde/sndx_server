@@ -5,10 +5,8 @@ const User = require('../models/user');
 
 const multer = require('multer');
 const path = require('path');
-//const csv = require('csvtojson');
 const csv = require('fast-csv');
 const fs = require('fs');
-//const DIR = 'Users/janblonde/angularauth/server/downloads/';
 const DIR = './downloads';
 
 var each = require('async-each');
@@ -58,72 +56,34 @@ function verifyToken(req, res, next){
       console.log('Unauthorized request 3')
       return res.status(401).send('Unauthorized request')
     } else {
-      //console.log(decoded);
+      req.gebouw = decoded.gebouw;
       req.userId = decoded.subject;
       next();
-          // if everything is good, save to request for use in other routes
-          //req.decoded = decoded;
-          //next();
     }
   })
-  // if(!payload) {
-  //   return res.status(401).send('Unauthorized request')
-  // }
-  //
-  // req.userId = payload.subject
-  // next()
 }
 
 router.get('/', (req,res) => {
   res.send('From API route');
 })
 
-router.post('/register', (req, res) =>{
+router.post('/register', async function (req, res){
   let userData = req.body
   let user = new User(userData);
 
-  // user.save((error, registeredUser)=>{
-  //   if(error){
-  //     console.log(error)
-  //   }else{
-  //     let payload = {subject:registeredUser._id}
-  //     let token = jwt.sign(payload, 'secretKey')
-  //     res.status(200).send({token})
-  //   }
-  // })
 
-  //TODO check for duplicate email
+  let resultsGebouwen = await pool.query('INSERT INTO gebouwen (overgenomen_saldo_werk, overgenomen_saldo_reserve) VALUES (0, 0) RETURNING id')
 
-  pool.query('INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id', [user.email, user.password], (error, results) => {
-    if (error) {
-      throw error
-    }
-    let payload = {subject:results.rows[0].id};
-    let token = jwt.sign(payload, 'secretKey');
-    res.status(200).send({token});
-  })
+  let results = await pool.query('INSERT INTO users (email, password, fk_gebouw) VALUES ($1, $2, $3) RETURNING id',
+                               [user.email, user.password, resultsGebouwen.rows[0].id]);
+
+  let payload = {subject:results.rows[0].id, gebouw: resultsGebouwen.rows[0].id};
+  let token = jwt.sign(payload, 'secretKey');
+  res.status(200).send({token});
 })
 
 router.post('/login', (req, res) => {
   let userData = req.body
-
-  // User.findOne({email: userData.email}, (error, user) =>{
-  //   if(error){
-  //     console.log(error)
-  //   }else{
-  //     if(!user){
-  //       res.status(401).send('Invalid email')
-  //     }else{
-  //       if(user.password !== userData.password){
-  //         res.status(401).send('Invalid password')
-  //       }else{
-  //         let payload = {subject:user._id}
-  //         let token = jwt.sign(payload, 'secretKey')
-  //         res.status(200).send({token})
-  //       }
-  //     }
-  //   }
-  // })
 
   pool.query('SELECT * FROM users WHERE email = $1', [userData.email], (error, results) => {
     if (error) {
@@ -135,7 +95,7 @@ router.post('/login', (req, res) => {
         if(results.rows[0].password !== userData.password){
           res.status(401).send('Invalid password')
         }else{
-          let payload = {subject:results.rows[0].id}
+          let payload = {subject:results.rows[0].id, gebouw:results.rows[0].fk_gebouw}
           let token = jwt.sign(payload, 'secretKey')
           res.status(200).send({token})
         }
@@ -147,8 +107,8 @@ router.post('/login', (req, res) => {
 router.post('/units', verifyToken, (req,res) => {
   console.log('post units');
 
-  pool.query('INSERT INTO units (naam, duizendste, fk_users) VALUES ($1, $2, $3) RETURNING id',
-                [req.body.naam, req.body.duizendste, req.userId], (error, results) => {
+  pool.query('INSERT INTO units (naam, duizendste, fk_gebouw) VALUES ($1, $2, $3) RETURNING id',
+                [req.body.naam, req.body.duizendste, req.gebouw], (error, results) => {
                   if(error) {
                     console.log('error');
                   }else{
@@ -173,21 +133,17 @@ router.put('/units', verifyToken, (req,res) => {
 
 router.get('/units', verifyToken, (req, res) =>{
   console.log('get units');
-  //console.log(req.headers);
 
   let queryString = "SELECT units.id as id, units.naam as naam, units.duizendste as duizendste,"+
                     "partners.naam as eigenaar, partners.id as eigenaarid from units " +
                     "LEFT OUTER JOIN eigendom ON units.id = eigendom.unit " +
                     "LEFT OUTER JOIN partners ON eigendom.eigenaar = partners.id " +
-                    "WHERE units.fk_users = $1 ORDER BY units.naam";
+                    "WHERE units.fk_gebouw = $1 ORDER BY units.naam";
 
-  //'SELECT id,naam, duizendste from units WHERE fk_users = $1'
-
-  pool.query(queryString, [req.userId], (error, results) => {
+  pool.query(queryString, [req.gebouw], (error, results) => {
     if(error) {
       console.log(error)
     }else{
-      console.log(results.rows);
       res.status(200).send(results.rows);
     }
   })
@@ -196,14 +152,11 @@ router.get('/units', verifyToken, (req, res) =>{
 
 router.get('/unit', verifyToken, (req, res) =>{
   console.log('get unit');
-  // console.log(req.params.id);
-  console.log(req.query.id);
 
   pool.query('SELECT id, naam, duizendste from units WHERE id = $1', [req.query.id], (error, results) => {
     if(error) {
       console.log(error)
     }else{
-      console.log(results.rows[0])
       res.status(200).send(results.rows[0]);
     }
   })
@@ -212,15 +165,13 @@ router.get('/unit', verifyToken, (req, res) =>{
 
 
 router.post('/eigenaars', verifyToken, (req, res) => {
-  console.log(req.body);
-  pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, fk_type, fk_users) VALUES ($1, $2, $3, $4, 1, $5) RETURNING id",
-                [req.body.naam, req.body.voornaam, req.body.bankrnr, req.body.email, req.userId], (error, results) => {
+
+  pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, fk_type, fk_gebouw) VALUES ($1, $2, $3, $4, 1, $5) RETURNING id",
+                [req.body.naam, req.body.voornaam, req.body.bankrnr, req.body.email, req.gebouw], (error, results) => {
                   if(error) {
                     console.log(error);
                   }else{
-                    console.log(results);
                     createEigendom(req, res, results.rows[0].id, req.body.unitFK);
-                    //res.status(200).send(results);
                   }
                 })
 })
@@ -240,7 +191,6 @@ function createEigendom(req, res, eigenaarId, unitId) {
 
 router.put('/eigenaars', verifyToken, (req,res) => {
   console.log('put eigenaars');
-  console.log(req.body);
 
   pool.query("UPDATE partners SET naam=$1, voornaam=$2, email=$3, bankrnr=$4 WHERE id=$5 RETURNING id",
                 [req.body.naam, req.body.voornaam, req.body.email, req.body.bankrnr, req.body.id], (error, results) => {
@@ -254,14 +204,11 @@ router.put('/eigenaars', verifyToken, (req,res) => {
 
 router.get('/eigenaar', verifyToken, (req, res) =>{
   console.log('get unit');
-  // console.log(req.params.id);
-  console.log(req.query.id);
 
   pool.query('SELECT id, naam, voornaam, email, bankrnr from partners WHERE id = $1', [req.query.id], (error, results) => {
     if(error) {
       console.log(error)
     }else{
-      console.log(results.rows[0])
       res.status(200).send(results.rows[0]);
     }
   })
@@ -270,9 +217,8 @@ router.get('/eigenaar', verifyToken, (req, res) =>{
 
 router.get('/eigenaars', verifyToken, (req, res) =>{
   console.log('get eigenaars');
-  console.log(req.userId);
 
-  pool.query('SELECT id, naam, voornaam, email, bankrnr from partners WHERE fk_users = $1 AND fk_type=1', [req.userId], (error, results) => {
+  pool.query('SELECT id, naam, voornaam, email, bankrnr from partners WHERE fk_gebouw = $1 AND fk_type=1', [req.gebouw], (error, results) => {
     if(error) {
       console.log(error)
     }else{
@@ -289,9 +235,9 @@ router.get('/uittreksels', verifyToken, (req,res)=>{
                     "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
                     "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
                     "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
-                    "WHERE br.fk_users = ($1) AND br.type = ($2);"
+                    "WHERE br.fk_gebouw = ($1) AND br.type = ($2);"
 
-  pool.query(queryString, [req.userId,req.query.type], (error, results) => {
+  pool.query(queryString, [req.gebouw,req.query.type], (error, results) => {
     if(error) {
       console.log(error)
     }else{
@@ -323,9 +269,9 @@ router.get('/ongekoppelde_uittreksels', verifyToken, (req,res)=>{
   let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, bu.omschrijving " +
                     "FROM bankrekeninguittreksels as bu " +
                     "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
-                    "WHERE br.fk_users = ($1) AND br.type = 'werk' AND bu.fk_partner is Null;"
+                    "WHERE br.fk_gebouw = ($1) AND br.type = 'werk' AND bu.fk_partner is Null;"
 
-  pool.query(queryString, [req.userId], (error, results) => {
+  pool.query(queryString, [req.gebouw], (error, results) => {
     if(error) {
       console.log(error)
     }else{
@@ -336,8 +282,8 @@ router.get('/ongekoppelde_uittreksels', verifyToken, (req,res)=>{
 })
 
 router.post('/partners', verifyToken, (req, res) => {
-  pool.query("INSERT INTO partners (naam, bankrnr, fk_type, fk_users) VALUES ($1, $2, $3, $4) RETURNING id",
-                [req.body.naam, req.body.rekeningnummer, req.body.fk_type, req.userId], (error, results) => {
+  pool.query("INSERT INTO partners (naam, bankrnr, fk_type, fk_gebouw) VALUES ($1, $2, $3, $4) RETURNING id",
+                [req.body.naam, req.body.rekeningnummer, req.body.fk_type, req.gebouw], (error, results) => {
                   if(error) {
                     console.log(error);
                   }else{
@@ -365,8 +311,8 @@ router.put('/uittreksels', verifyToken, (req,res) => {
 
 router.get('/kostentypes', verifyToken, (req,res) => {
   console.log('kostentypes');
-  pool.query("SELECT id, naam from kosten_types WHERE fk_users = $1 and id>1",
-              [req.userId], (error, results) => {
+  pool.query("SELECT id, naam from kosten_types WHERE fk_gebouw = $1 and id>1",
+              [req.gebouw], (error, results) => {
                 if(error){
                   console.log(error);
                 }else{
@@ -381,8 +327,8 @@ router.get('/facturen', verifyToken, (req,res) => {
   let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fk_uittreksel "+
                     "FROM facturen as fa "+
                     "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
-                    "WHERE fa.fk_users = $1 and fa.type='leverancier'";
-  pool.query(queryString, [req.userId], (error, results) => {
+                    "WHERE fa.fk_gebouw = $1 and fa.type='leverancier'";
+  pool.query(queryString, [req.gebouw], (error, results) => {
                 if(error){
                   console.log(error);
                 }else{
@@ -397,8 +343,8 @@ router.get('/voorschotten', verifyToken, (req,res) => {
   let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fk_uittreksel "+
                     "FROM facturen as fa "+
                     "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
-                    "WHERE fa.fk_users = $1 and fa.type='voorschot'";
-  pool.query(queryString, [req.userId], (error, results) => {
+                    "WHERE fa.fk_gebouw = $1 and fa.type='voorschot'";
+  pool.query(queryString, [req.gebouw], (error, results) => {
                 if(error){
                   console.log(error);
                 }else{
@@ -412,8 +358,8 @@ router.post('/facturen', verifyToken, async function (req,res){
 
   factuurID = null;
 
-  const results1 = await pool.query("INSERT INTO facturen (bedrag, omschrijving, fk_partner, fk_users, type) VALUES ($1, $2, $3, $4,'leverancier') RETURNING id",
-                [req.body.bedrag, req.body.omschrijving, req.body.fk_partner, req.userId]);
+  const results1 = await pool.query("INSERT INTO facturen (bedrag, omschrijving, fk_partner, fk_gebouw, type) VALUES ($1, $2, $3, $4,'leverancier') RETURNING id",
+                [req.body.bedrag, req.body.omschrijving, req.body.fk_partner, req.gebouw]);
 
   factuurID = results1.rows[0].id;
 
@@ -436,8 +382,8 @@ router.post('/facturen', verifyToken, async function (req,res){
 
 router.get('/leveranciers', verifyToken, (req,res) => {
   console.log('leveranciers');
-  pool.query("SELECT id, naam FROM partners WHERE fk_users = $1 and fk_type>1",
-              [req.userId], (error, results) => {
+  pool.query("SELECT id, naam FROM partners WHERE fk_gebouw = $1 and fk_type>1",
+              [req.gebouw], (error, results) => {
                 if(error){
                   console.log(error);
                 }else{
@@ -452,7 +398,7 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
   let rapport = new Map();
 
   const result = await pool.query('SELECT id, naam, voornaam, email, bankrnr, overgenomen_saldo_werk '+
-                                  'FROM partners WHERE fk_users = $1 AND fk_type=1', [req.userId]);
+                                  'FROM partners WHERE fk_gebouw = $1 AND fk_type=1', [req.gebouw]);
 
   for(let element of result.rows){
     rapport.set(element.naam,{'voorschotten':0,'uitgaven':0,'saldo':0,'vorig_saldo':parseInt(element.overgenomen_saldo_werk),
@@ -464,9 +410,9 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
                     "partners.naam as eigenaar, partners.id as eigenaarid from units " +
                     "LEFT OUTER JOIN eigendom ON units.id = eigendom.unit " +
                     "LEFT OUTER JOIN partners ON eigendom.eigenaar = partners.id " +
-                    "WHERE units.fk_users = $1 ORDER BY units.naam";
+                    "WHERE units.fk_gebouw = $1 ORDER BY units.naam";
 
-  const result2 = await pool.query(queryString, [req.userId]);
+  const result2 = await pool.query(queryString, [req.gebouw]);
 
   for(let element of result2.rows){
     let myObj = rapport.get(element.eigenaar);
@@ -479,9 +425,9 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
                     "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
                     "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
                     "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
-                    "WHERE br.fk_users = ($1) AND br.type = 'werk';"
+                    "WHERE br.fk_gebouw = ($1) AND br.type = 'werk';"
 
-  const result3 = await pool.query(queryString2, [req.userId]);
+  const result3 = await pool.query(queryString2, [req.gebouw]);
 
   for(let element of result3.rows){
     //console.log(element);
@@ -519,7 +465,7 @@ router.get('/inkomstenrapport', verifyToken, async function(req, res) {
 
   //get eigenaars
   const result = await pool.query('SELECT id, naam, voornaam, email, bankrnr, overgenomen_saldo_werk '+
-                                  'FROM partners WHERE fk_users = $1 AND fk_type=1', [req.userId]);
+                                  'FROM partners WHERE fk_gebouw = $1 AND fk_type=1', [req.gebouw]);
 
   for(let element of result.rows){
     rapport.set(element.naam,{'0':0,'1':0,'2':0,'3':0,'4':0,'5':0,
@@ -531,9 +477,9 @@ router.get('/inkomstenrapport', verifyToken, async function(req, res) {
                     "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
                     "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
                     "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
-                    "WHERE br.fk_users = ($1) AND br.type = 'werk';"
+                    "WHERE br.fk_gebouw = ($1) AND br.type = 'werk';"
 
-  const result2 = await pool.query(queryString2, [req.userId]);
+  const result2 = await pool.query(queryString2, [req.gebouw]);
 
   for(let element of result2.rows){
     let myDate = new Date(element.datum);
@@ -561,7 +507,7 @@ router.get('/uitgavenrapport', verifyToken, async function(req, res) {
 
   //get eigenaars
   const result = await pool.query('SELECT id, naam, voornaam, email, bankrnr, overgenomen_saldo_werk '+
-                                  'FROM partners WHERE fk_users = $1 AND fk_type>1', [req.userId]);
+                                  'FROM partners WHERE fk_gebouw = $1 AND fk_type>1', [req.gebouw]);
 
   for(let element of result.rows){
     rapport.set(element.naam,{'0':0,'1':0,'2':0,'3':0,'4':0,'5':0,
@@ -573,9 +519,9 @@ router.get('/uitgavenrapport', verifyToken, async function(req, res) {
                     "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
                     "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
                     "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
-                    "WHERE br.fk_users = ($1) AND br.type = 'werk';"
+                    "WHERE br.fk_gebouw = ($1) AND br.type = 'werk';"
 
-  const result2 = await pool.query(queryString2, [req.userId]);
+  const result2 = await pool.query(queryString2, [req.gebouw]);
 
   for(let element of result2.rows){
     let myDate = new Date(element.datum);
@@ -604,9 +550,9 @@ router.get('/balans', verifyToken, async function(req, res) {
   //openstaande voorschotten
   let queryString = "SELECT facturen.id, facturen.bedrag, partners.naam FROM facturen "+
                     "LEFT OUTER JOIN partners ON facturen.fk_partner = partners.id "+
-                    "WHERE facturen.fk_users = $1 AND facturen.type='voorschot' AND facturen.fk_uittreksel IS NULL";
+                    "WHERE facturen.fk_gebouw = $1 AND facturen.type='voorschot' AND facturen.fk_uittreksel IS NULL";
 
-  const result = await pool.query(queryString, [req.userId]);
+  const result = await pool.query(queryString, [req.gebouw]);
 
   let vorderingenTotaal = 0
 
@@ -622,9 +568,9 @@ router.get('/balans', verifyToken, async function(req, res) {
   //bankrekening
   let queryString2 = "SELECT SUM(bedrag) as som FROM bankrekeninguittreksels AS bu "+
                     "JOIN bankrekeningen AS br ON bu.fk_bankrekening = br.id "+
-                    "WHERE br.fk_users = $1 AND type = 'werk'";
+                    "WHERE br.fk_gebouw = $1 AND type = 'werk'";
 
-  const result2 = await pool.query(queryString2, [req.userId]);
+  const result2 = await pool.query(queryString2, [req.gebouw]);
 
   rapport.bank = result2.rows[0].som;
 
@@ -674,7 +620,7 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
     }
 
     //get rekeningnummers
-    const result = await pool.query('SELECT id, rekeningnummer FROM bankrekeningen WHERE fk_users = ($1)', [req.userId]);
+    const result = await pool.query('SELECT id, rekeningnummer FROM bankrekeningen WHERE fk_gebouw = ($1)', [req.gebouw]);
 
     rekeningnummers = new Map();
     if(result.rows){
@@ -684,7 +630,7 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
     }
 
     //get partners: fk's en types
-    const p_result = await pool.query('SELECT id, fk_type, bankrnr FROM partners WHERE fk_users = ($1)', [req.userId]);
+    const p_result = await pool.query('SELECT id, fk_type, bankrnr FROM partners WHERE fk_gebouw = ($1)', [req.gebouw]);
 
     p_rekeningnummers = new Map();
     if(p_result.rows){
@@ -723,7 +669,7 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
                                                           p_types.get(data[12])])//,
 
             //TODO: check of dit een factuur betaald
-            const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM facturen where fk_uittreksel IS NULL and fk_users = $1', [req.userId]);
+            const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM facturen where fk_uittreksel IS NULL and fk_gebouw = $1', [req.gebouw]);
 
             for(let element of f_result.rows){
               if(element.bedrag==data[8].replace(",",".")&&element.fk_partner===p_rekeningnummers.get(data[12])){
