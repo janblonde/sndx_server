@@ -33,7 +33,7 @@ const Pool = require('pg').Pool
 
 const pool = new Pool({
   user: 'postgres',
-  host: 'ec2-35-157-5-107.eu-central-1.compute.amazonaws.com',
+  host: 'ec2-3-124-192-140.eu-central-1.compute.amazonaws.com',
   database: 'api',
   password: 'coPRbi51',
   port: 5432,
@@ -392,6 +392,100 @@ router.get('/leveranciers', verifyToken, (req,res) => {
               })
 })
 
+router.post('/instellingen', verifyToken, (req, res) => {
+
+  const queryString = "INSERT INTO instellingen (adres, periodiciteit_voorschot, dag_voorschot, " +
+                      "kosten, werkrekeningnummer, overgenomen_werkrekening, reserverekeningnummer, " +
+                      "overgenomen_reserverekening, fk_gebouw) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id"
+
+  pool.query(queryString, [req.body.adres, req.body.periodiciteit, req.body.voorschotdag,
+                            req.body.kosten, req.body.werkrekeningnummer,
+                            req.body.overgenomen_werkrekening, req.body.reserverekeningnummer,
+                            req.body.overgenomen_reserverekening, req.gebouw], (error, results) => {
+                              if(error){
+                                console.log(error);
+                              }else{
+                                res.status(200).send(results);
+                              }
+                            })
+})
+
+router.put('/instellingen', verifyToken, (req, res) => {
+
+  const queryString = "UPDATE instellingen SET adres=$1, periodiciteit_voorschot=$2, dag_voorschot=$3, " +
+                      "kosten=$4, werkrekeningnummer=$5, overgenomen_werkrekening=$6, reserverekeningnummer=$7, " +
+                      "overgenomen_reserverekening=$8 WHERE fk_gebouw=$9"
+
+  pool.query(queryString, [req.body.adres, req.body.periodiciteit, req.body.voorschotdag,
+                            req.body.kosten, req.body.werkrekeningnummer,
+                            req.body.overgenomen_werkrekening, req.body.reserverekeningnummer,
+                            req.body.overgenomen_reserverekening, req.gebouw], (error, results) => {
+                              if(error){
+                                console.log(error);
+                              }else{
+                                res.status(200).send(results);
+                              }
+                            })
+
+  // console.log("post agenda")
+  // let date = new Date();
+  // let month = date.getMonth()
+  // let year = date.getFullYear()
+  //
+  // let periodiciteit = req.body.periodiciteit
+  // let dag = req.body.voorschotdag
+  //
+  // for(var i=0;i<10;i++){
+  //   var aMonth = parseInt(month) + 1 + i
+  //   if(aMonth==13){year++}
+  //   if(aMonth>12){aMonth = aMonth-12}
+  //
+  //   //voorschotten
+  //   var voorschotDate = new Date(year + ',' + aMonth +',' + dag)
+  //   console.log(voorschotDate)
+  //
+  //   //aanmaningen
+  //   var aDag = parseInt(dag) + 14
+  //   var aanmaningsDate = null
+  //   if (aDag<31){
+  //     aanmaningsDate = new Date(year + ',' + aMonth + ',' + aDag+1)
+  //   }else{
+  //     if((parseInt(aMonth)+1)==13){
+  //       aanmaningsDate = new Date(year + ',' + (parseInt(aMonth)+1).toString() + ',' + (aDag-31).toString())
+  //     }else{
+  //       aanmaningsDate = new Date(year+1 + ',' + "1" + ',' + (aDag-31).toString())
+  //     }
+  //   }
+  //   console.log(aanmaningsDate)
+
+  //}
+})
+
+router.get('/instellingen', verifyToken, (req,res) => {
+
+  const queryString = "SELECT * from instellingen where fk_gebouw = $1"
+
+  pool.query(queryString, [req.gebouw], (error, results) =>{
+    if(error) {
+      console.log(error)
+    }else{
+      res.status(200).send(results.rows);
+    }
+  })
+
+})
+
+router.get('/agenda', verifyToken, (req,res) => {
+  const queryString = "SELECT * FROM agenda WHERE fk_gebouw = $1 ORDER BY datum LIMIT 3"
+
+  pool.query(queryString, [req.gebouw], (error, results) => {
+    if(error) console.log(error)
+    else res.status(200).send(results.rows)
+  })
+})
+
+
+//rapporten
 router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
   console.log('werkrekeningrapport');
 
@@ -596,6 +690,13 @@ router.get('/balans', verifyToken, async function(req, res) {
   return res.status(200).send(rapport);
 
 })
+
+// router.post('/upload2',verifyToken, function(req,res){
+//   console.log('upload2');
+//   console.log(req);
+//   console.log(req.file);
+//   return res.status(200).send()
+// })
 
 //fileupload
 let storage = multer.diskStorage({
