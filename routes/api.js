@@ -33,7 +33,7 @@ const Pool = require('pg').Pool
 
 const pool = new Pool({
   user: 'postgres',
-  host: 'ec2-3-124-192-140.eu-central-1.compute.amazonaws.com',
+  host: 'ec2-3-122-245-114.eu-central-1.compute.amazonaws.com',
   database: 'api',
   password: 'coPRbi51',
   port: 5432,
@@ -327,7 +327,7 @@ router.get('/facturen', verifyToken, (req,res) => {
   let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fk_uittreksel "+
                     "FROM facturen as fa "+
                     "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
-                    "WHERE fa.fk_gebouw = $1 and fa.type='leverancier'";
+                    "WHERE fa.fk_gebouw = $1 and fa.type='leverancier' ORDER BY fa.datum";
   pool.query(queryString, [req.gebouw], (error, results) => {
                 if(error){
                   console.log(error);
@@ -343,7 +343,7 @@ router.get('/voorschotten', verifyToken, (req,res) => {
   let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fk_uittreksel "+
                     "FROM facturen as fa "+
                     "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
-                    "WHERE fa.fk_gebouw = $1 and fa.type='voorschot'";
+                    "WHERE fa.fk_gebouw = $1 and fa.type='voorschot' ORDER BY fa.datum";
   pool.query(queryString, [req.gebouw], (error, results) => {
                 if(error){
                   console.log(error);
