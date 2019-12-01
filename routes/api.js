@@ -484,6 +484,31 @@ router.get('/agenda', verifyToken, (req,res) => {
   })
 })
 
+//saldi
+router.get('/werkrekeningsaldo', verifyToken, (req,res)=>{
+  let queryString = "SELECT sum(bu.bedrag) "+
+                    "FROM public.bankrekeninguittreksels AS bu "+
+                    "LEFT OUTER JOIN bankrekeningen AS br ON bu.fk_bankrekening = br.id "+
+                    "WHERE br.fk_gebouw = $1 AND br.type = 'werk'";
+
+  pool.query(queryString, [req.gebouw], (error, results)=>{
+    if(error) console.log(error)
+    else res.status(200).send(results)
+  })
+})
+
+router.get('/reserverekeningsaldo', verifyToken, (req,res)=>{
+  let queryString = "SELECT sum(bu.bedrag) "+
+                    "FROM public.bankrekeninguittreksels AS bu "+
+                    "LEFT OUTER JOIN bankrekeningen AS br ON bu.fk_bankrekening = br.id "+
+                    "WHERE br.fk_gebouw = $1 AND br.type = 'reserve'";
+
+  pool.query(queryString, [req.gebouw], (error, results)=>{
+    if(error) console.log(error)
+    else res.status(200).send(results)
+  })
+})
+
 
 //rapporten
 router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
@@ -495,7 +520,7 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
                                   'FROM partners WHERE fk_gebouw = $1 AND fk_type=1', [req.gebouw]);
 
   for(let element of result.rows){
-    rapport.set(element.naam,{'voorschotten':0,'uitgaven':0,'saldo':0,'vorig_saldo':parseInt(element.overgenomen_saldo_werk),
+    rapport.set(element.naam,{'voorschotten':0,'uitgaven':0,'saldo':0,'vorig_saldo':0 || parseInt(element.overgenomen_saldo_werk),
                               'totaal':0,'verdeelsleutel':0});
   };
 
@@ -524,7 +549,6 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
   const result3 = await pool.query(queryString2, [req.gebouw]);
 
   for(let element of result3.rows){
-    //console.log(element);
     //voorschotten
     if(rapport.get(element.tegenpartij)&&element.type=='voorschot'){
       let myObj = rapport.get(element.tegenpartij);
@@ -541,11 +565,29 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
     }
   }
 
+  let totaalVoorschotten = 0
+  let totaalUitgaven = 0
+  let totaalSaldo = 0
+  let totaalOvergenomensaldo = 0
+  let totaalTotaal = 0
+
   rapport.forEach(function(value,key){
     value.saldo = value.voorschotten + value.uitgaven
     value.totaal = value.saldo + value.vorig_saldo
     rapport.set(key,value);
+
+    totaalVoorschotten = totaalVoorschotten + value.voorschotten
+    totaalUitgaven = totaalUitgaven + value.uitgaven
+    totaalSaldo = totaalSaldo + value.saldo
+    totaalOvergenomensaldo = totaalOvergenomensaldo + value.vorig_saldo
+    totaalTotaal = totaalTotaal + value.totaal
   })
+
+  rapport.set('Totaal',{'voorschotten':totaalVoorschotten,
+                        'uitgaven':totaalUitgaven,
+                        'saldo':totaalSaldo,
+                        'vorig_saldo':totaalOvergenomensaldo,
+                        'totaal':totaalTotaal});
 
   console.log(rapport);
   return res.status(200).send(Array.from(rapport));
@@ -575,6 +617,20 @@ router.get('/inkomstenrapport', verifyToken, async function(req, res) {
 
   const result2 = await pool.query(queryString2, [req.gebouw]);
 
+  let t0 = 0
+  let t1 = 0
+  let t2 = 0
+  let t3 = 0
+  let t4 = 0
+  let t5 = 0
+  let t6 = 0
+  let t7 = 0
+  let t8 = 0
+  let t9 = 0
+  let t10 = 0
+  let t11 = 0
+  let t12 = 0
+
   for(let element of result2.rows){
     let myDate = new Date(element.datum);
     let month = myDate.getMonth()
@@ -586,8 +642,27 @@ router.get('/inkomstenrapport', verifyToken, async function(req, res) {
       myObj[12] = myObj[12] + parseInt(element.bedrag.toString());
 
       rapport.set(element.tegenpartij,myObj);
+
+      if(month==0) t0=t0+parseInt(element.bedrag.toString())
+      else if(month==1) t1=t1+parseInt(element.bedrag.toString())
+      else if(month==2) t2=t2+parseInt(element.bedrag.toString())
+      else if(month==3) t3=t3+parseInt(element.bedrag.toString())
+      else if(month==4) t4=t4+parseInt(element.bedrag.toString())
+      else if(month==5) t5=t5+parseInt(element.bedrag.toString())
+      else if(month==6) t6=t6+parseInt(element.bedrag.toString())
+      else if(month==7) t7=t7+parseInt(element.bedrag.toString())
+      else if(month==8) t8=t8+parseInt(element.bedrag.toString())
+      else if(month==9) t9=t9+parseInt(element.bedrag.toString())
+      else if(month==10) t10=t10+parseInt(element.bedrag.toString())
+      else if(month==11) t11=t11+parseInt(element.bedrag.toString())
+
+      t12 = t12 + parseInt(element.bedrag.toString())
+
     }
   }
+
+  rapport.set('Totaal',{'0':t0,'1':t1,'2':t2,'3':t3,'4':t4,'5':t5,
+                            '6':t6,'7':t7,'8':t8,'9':t9,'10':t10,'11':t11,'12':t12})
 
   console.log(rapport);
   return res.status(200).send(Array.from(rapport));
@@ -617,6 +692,20 @@ router.get('/uitgavenrapport', verifyToken, async function(req, res) {
 
   const result2 = await pool.query(queryString2, [req.gebouw]);
 
+  let t0 = 0
+  let t1 = 0
+  let t2 = 0
+  let t3 = 0
+  let t4 = 0
+  let t5 = 0
+  let t6 = 0
+  let t7 = 0
+  let t8 = 0
+  let t9 = 0
+  let t10 = 0
+  let t11 = 0
+  let t12 = 0
+
   for(let element of result2.rows){
     let myDate = new Date(element.datum);
     let month = myDate.getMonth()
@@ -628,8 +717,26 @@ router.get('/uitgavenrapport', verifyToken, async function(req, res) {
       myObj[12] = myObj[12] + parseInt(element.bedrag.toString());
 
       rapport.set(element.tegenpartij,myObj);
+
+      if(month==0) t0=t0+parseInt(element.bedrag.toString())
+      else if(month==1) t1=t1+parseInt(element.bedrag.toString())
+      else if(month==2) t2=t2+parseInt(element.bedrag.toString())
+      else if(month==3) t3=t3+parseInt(element.bedrag.toString())
+      else if(month==4) t4=t4+parseInt(element.bedrag.toString())
+      else if(month==5) t5=t5+parseInt(element.bedrag.toString())
+      else if(month==6) t6=t6+parseInt(element.bedrag.toString())
+      else if(month==7) t7=t7+parseInt(element.bedrag.toString())
+      else if(month==8) t8=t8+parseInt(element.bedrag.toString())
+      else if(month==9) t9=t9+parseInt(element.bedrag.toString())
+      else if(month==10) t10=t10+parseInt(element.bedrag.toString())
+      else if(month==11) t11=t11+parseInt(element.bedrag.toString())
+
+      t12 = t12 + parseInt(element.bedrag.toString())
     }
   }
+
+  rapport.set('Totaal',{'0':t0,'1':t1,'2':t2,'3':t3,'4':t4,'5':t5,
+                            '6':t6,'7':t7,'8':t8,'9':t9,'10':t10,'11':t11,'12':t12})
 
   console.log(rapport);
   return res.status(200).send(Array.from(rapport));
@@ -649,7 +756,6 @@ router.get('/balans', verifyToken, async function(req, res) {
   const result = await pool.query(queryString, [req.gebouw]);
 
   let vorderingenTotaal = 0
-
   rapport.vorderingen_detail = []
 
   for (let element of result.rows){
@@ -667,6 +773,25 @@ router.get('/balans', verifyToken, async function(req, res) {
   const result2 = await pool.query(queryString2, [req.gebouw]);
 
   rapport.bank = result2.rows[0].som;
+
+  //openstaande leveranciers
+  let queryString3 = "SELECT facturen.id, facturen.bedrag, partners.naam FROM facturen "+
+                    "LEFT OUTER JOIN partners ON facturen.fk_partner = partners.id "+
+                    "WHERE facturen.fk_gebouw = $1 AND facturen.type='leverancier' AND facturen.fk_uittreksel IS NULL";
+
+  const result3 = await pool.query(queryString3, [req.gebouw]);
+
+  let leveranciersTotaal = 0
+  rapport.leveranciers_detail = []
+
+  for (let element of result3.rows){
+    rapport.leveranciers_detail.push({'naam':element.naam,'bedrag':-element.bedrag});
+    leveranciersTotaal = leveranciersTotaal + parseInt(element.bedrag);
+  }
+
+  rapport.leveranciers = -leveranciersTotaal;
+
+  rapport.teveelvoorschotten = parseInt(rapport.bank) + parseInt(rapport.vorderingen) - parseInt(rapport.leveranciers)
 
   // let rapport = {'vorderingen': {
   //                   'totaal':100,
@@ -686,17 +811,38 @@ router.get('/balans', verifyToken, async function(req, res) {
   //  'vorderingen_detail':[{'naam':'test1','bedrag':100},{'naam':'test2','bedrag':200}]
   // }
 
-  console.log(rapport);
+  //console.log(rapport);
   return res.status(200).send(rapport);
 
 })
 
-// router.post('/upload2',verifyToken, function(req,res){
-//   console.log('upload2');
-//   console.log(req);
-//   console.log(req.file);
-//   return res.status(200).send()
-// })
+router.get('/inkomsten', verifyToken, (req,res)=>{
+  const queryString = "SELECT date_trunc( 'month', bu.datum ), SUM(bu.bedrag) "+
+                      "FROM bankrekeninguittreksels AS bu "+
+                      "LEFT OUTER JOIN bankrekeningen AS br ON bu.fk_bankrekening = br.id "+
+                      "WHERE bu.bedrag>0 AND br.fk_gebouw = $1 "+
+                      "GROUP BY date_trunc( 'month', bu.datum ) ORDER BY date_trunc( 'month', bu.datum );"
+
+  pool.query(queryString, [req.gebouw], (error, results) => {
+    if(error) console.log(error)
+    else res.status(200).send(results)
+  })
+
+})
+
+router.get('/uitgaven', verifyToken, (req,res)=>{
+  const queryString = "SELECT date_trunc( 'month', bu.datum ), SUM(bu.bedrag) "+
+                      "FROM bankrekeninguittreksels AS bu "+
+                      "LEFT OUTER JOIN bankrekeningen AS br ON bu.fk_bankrekening = br.id "+
+                      "WHERE bu.bedrag<0 AND br.fk_gebouw = $1 "+
+                      "GROUP BY date_trunc( 'month', bu.datum ) ORDER BY date_trunc( 'month', bu.datum );"
+
+  pool.query(queryString, [req.gebouw], (error, results) => {
+    if(error) console.log(error)
+    else res.status(200).send(results)
+  })
+
+})
 
 //fileupload
 let storage = multer.diskStorage({
@@ -770,10 +916,16 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
                                                           p_types.get(data[12])])//,
 
             //TODO: check of dit een factuur betaald
-            const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM facturen where fk_uittreksel IS NULL and fk_gebouw = $1', [req.gebouw]);
+            const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM facturen where fk_uittreksel IS NULL and fk_gebouw = $1 ORDER BY datum', [req.gebouw]);
+            console.log(f_result.rows);
 
             for(let element of f_result.rows){
-              if(element.bedrag==data[8].replace(",",".")&&element.fk_partner===p_rekeningnummers.get(data[12])){
+              console.log(data[8].replace(",","."))
+              console.log(p_rekeningnummers.get(data[12]))
+              console.log(results.rows[0].id)
+              console.log(element.id)
+              if(parseInt(element.bedrag)==parseInt(data[8].replace(",","."))&&element.fk_partner===p_rekeningnummers.get(data[12])){
+                console.log('match')
                 const results2 = await pool.query('UPDATE bankrekeninguittreksels SET fk_factuur=$1 WHERE id=$2',[element.id,results.rows[0].id]);
                 const results3 = await pool.query('UPDATE facturen SET fk_uittreksel = $1 WHERE id=$2', [results.rows[0].id,element.id]);
                 break;
