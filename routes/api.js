@@ -8,8 +8,11 @@ const path = require('path');
 const csv = require('fast-csv');
 const fs = require('fs');
 const DIR = './downloads';
+const nodemailer = require('nodemailer');
 
 var each = require('async-each');
+
+//---DATABASE---
 
 // const mongoose = require('mongoose');
 // const db = "mongodb://userjb:pwjb12@ds125342.mlab.com:25342/adb"
@@ -38,6 +41,36 @@ const pool = new Pool({
   password: 'coPRbi51',
   port: 5432,
 })
+
+//---EMAIL---
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'janhendrikblonde@gmail.com',
+    pass: 'ciFEja51'
+  }
+});
+
+const mailOptions = {
+  from: 'janhendrikblonde@gmail.com',
+  to: 'jan.blonde@icloud.com',
+  subject: 'Sending Email using Node.js',
+  text: 'That was easy!'
+};
+
+router.get('/mail',(req,res)=>{
+  transporter.sendMail(mailOptions, function(error,info){
+    if(error){
+      console.log(error);
+    }else{
+      console.log(req);
+      console.log('Email sent: ' + info.response);
+      res.status(200).send('OK');
+    }
+  })
+})
+
 
 function verifyToken(req, res, next){
   if(!req.headers.authorization){
