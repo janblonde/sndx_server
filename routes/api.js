@@ -38,7 +38,7 @@ const pool = new Pool({
   user: 'postgres',
   host: 'ec2-3-122-245-114.eu-central-1.compute.amazonaws.com',
   database: 'api',
-  password: 'coPRbi51',
+  password: '',
   port: 5432,
 })
 
