@@ -10,6 +10,8 @@ const fs = require('fs');
 const DIR = './downloads';
 const nodemailer = require('nodemailer');
 
+const config = require('../config.json');
+
 var each = require('async-each');
 
 //---DATABASE---
@@ -30,16 +32,16 @@ const Pool = require('pg').Pool
 //   user: 'me',
 //   host: 'localhost',
 //   database: 'api',
-//   password: 'ciFE',
-//   port: 5432,
+//   password: '',
+//   port: ,
 // })
 
 const pool = new Pool({
-  user: 'postgres',
-  host: 'ec2-3-122-245-114.eu-central-1.compute.amazonaws.com',
+  user: config.dbuser,
+  host: config.dbhost,
   database: 'api',
-  password: 'coPRbi51',
-  port: 5432,
+  password: config.dbpassword,
+  port: config.dbport,
 })
 
 //---EMAIL---
@@ -47,8 +49,8 @@ const pool = new Pool({
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'janhendrikblonde@gmail.com',
-    pass: 'ciFEja51'
+    user: config.mailuser,
+    pass: config.mailpassword
   }
 });
 
@@ -59,7 +61,7 @@ const mailOptions = {
   text: 'That was easy!'
 };
 
-router.get('/mail',(req,res)=>{
+router.post('/mail',(req,res)=>{
   transporter.sendMail(mailOptions, function(error,info){
     if(error){
       console.log(error);
@@ -111,7 +113,7 @@ router.post('/register', async function (req, res){
                                [user.email, user.password, resultsGebouwen.rows[0].id]);
 
   let payload = {subject:results.rows[0].id, gebouw: resultsGebouwen.rows[0].id};
-  let token = jwt.sign(payload, 'secretKey');
+  let token = jwt.sign(payload, config.key);
   res.status(200).send({token});
 })
 
@@ -268,7 +270,7 @@ router.get('/uittreksels', verifyToken, (req,res)=>{
                     "LEFT OUTER JOIN bankrekeningen as br ON bu.fk_bankrekening = br.id " +
                     "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
                     "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
-                    "WHERE br.fk_gebouw = ($1) AND br.type = ($2);"
+                    "WHERE br.fk_gebouw = ($1) AND br.type = ($2) ORDER BY bu.datum DESC;"
 
   pool.query(queryString, [req.gebouw,req.query.type], (error, results) => {
     if(error) {
@@ -283,7 +285,9 @@ router.get('/uittreksel', verifyToken, (req,res)=>{
   console.log('get uittreksel');
   console.log(req.query.id);
 
-  let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, bu.omschrijving FROM bankrekeninguittreksels as bu " +
+  let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, pa.naam as tegenpartij, bu.omschrijving, kt.naam as type FROM bankrekeninguittreksels as bu " +
+                    "LEFT OUTER JOIN partners as pa on bu.fk_partner = pa.id " +
+                    "LEFT OUTER JOIN kosten_types as kt on bu.fk_type = kt.id " +
                     "WHERE bu.id = ($1);"
 
   pool.query(queryString, [req.query.id], (error, results) => {
@@ -342,6 +346,22 @@ router.put('/uittreksels', verifyToken, (req,res) => {
 
 })
 
+router.put('/uittreksel', verifyToken, (req,res) => {
+  console.log('put uittreksel');
+  console.log(req.body);
+
+
+  pool.query("UPDATE bankrekeninguittreksels SET fk_type=$1, bedrag=$2 WHERE id=$3",
+                [req.body.type, req.body.bedrag, req.body.id], (error, results) => {
+                  if(error) {
+                    console.log(error);
+                  }else{
+                    res.status(200).send(results);
+                  }
+                })
+
+})
+
 router.get('/kostentypes', verifyToken, (req,res) => {
   console.log('kostentypes');
   pool.query("SELECT id, naam from kosten_types WHERE fk_gebouw = $1 and id>1",
@@ -370,10 +390,45 @@ router.get('/facturen', verifyToken, (req,res) => {
               })
 })
 
-router.get('/voorschotten', verifyToken, (req,res) => {
+router.get('/openfacturen', verifyToken, (req,res) => {
   console.log('facturen');
 
   let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fk_uittreksel "+
+                    "FROM facturen as fa "+
+                    "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
+                    "WHERE fa.fk_gebouw = $1 and fa.type='leverancier' and fk_uittreksel is Null ORDER BY fa.datum";
+  pool.query(queryString, [req.gebouw], (error, results) => {
+                if(error){
+                  console.log(error);
+                }else{
+                  res.status(200).send(results.rows);
+                }
+              })
+})
+
+router.get('/factuur', verifyToken, (req,res)=>{
+  console.log('get factuur');
+  console.log(req.query.id);
+
+  let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.fk_partner, fa.omschrijving, fa.datum, fa.vervaldatum, fa.fk_uittreksel, fa.type " +
+                    "FROM facturen as fa " +
+                    "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id " +
+                    "WHERE fa.id = ($1);"
+
+  pool.query(queryString, [req.query.id], (error, results) => {
+    if(error) {
+      console.log(error)
+    }else{
+      console.log(results.rows);
+      res.status(200).send(results.rows);
+    }
+  })
+})
+
+router.get('/voorschotten', verifyToken, (req,res) => {
+  console.log('facturen');
+
+  let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fa.fk_uittreksel "+
                     "FROM facturen as fa "+
                     "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
                     "WHERE fa.fk_gebouw = $1 and fa.type='voorschot' ORDER BY fa.datum";
@@ -410,6 +465,11 @@ router.post('/facturen', verifyToken, async function (req,res){
 
   res.status(200).send(results2);
 
+})
+
+router.put('/facturen', verifyToken, (req, res) =>{
+  console.log('put facturen')
+  console.log(req.body)
 })
 
 
@@ -825,6 +885,10 @@ router.get('/balans', verifyToken, async function(req, res) {
   rapport.leveranciers = -leveranciersTotaal;
 
   rapport.teveelvoorschotten = parseInt(rapport.bank) + parseInt(rapport.vorderingen) - parseInt(rapport.leveranciers)
+
+  rapport.totaal_activa = parseInt(rapport.bank) + parseInt(rapport.vorderingen)
+
+  rapport.totaal_passiva = parseInt(rapport.leveranciers) + parseInt(rapport.teveelvoorschotten)
 
   // let rapport = {'vorderingen': {
   //                   'totaal':100,
