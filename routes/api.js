@@ -40,8 +40,8 @@ const pool = new Pool({
   user: config.dbuser,
   host: config.dbhost,
   database: 'api',
-  password: '',
-  port: 5432,
+  password: config.dbpassword,
+  port: config.dbport,
 })
 
 //---EMAIL---
@@ -49,8 +49,8 @@ const pool = new Pool({
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'janhendrikblonde@gmail.com',
-    pass: ''
+    user: config.mailuser,
+    pass: config.mailpassword
   }
 });
 
@@ -86,7 +86,7 @@ function verifyToken(req, res, next){
     return res.status(401).send('Unauthorized request')
   }
 
-  jwt.verify(token, 'secretKey', function(err, decoded){
+  jwt.verify(token, config.key, function(err, decoded){
     if (err) {
       console.log('Unauthorized request 3')
       return res.status(401).send('Unauthorized request')
