@@ -442,12 +442,11 @@ router.get('/voorschotten', verifyToken, (req,res) => {
 })
 
 router.post('/facturen', verifyToken, async function (req,res){
-  console.log(req.body);
 
   factuurID = null;
 
-  const results1 = await pool.query("INSERT INTO facturen (bedrag, omschrijving, fk_partner, fk_gebouw, type) VALUES ($1, $2, $3, $4,'leverancier') RETURNING id",
-                [req.body.bedrag, req.body.omschrijving, req.body.fk_partner, req.gebouw]);
+  const results1 = await pool.query("INSERT INTO facturen (bedrag, omschrijving, datum, fk_partner, fk_gebouw, type) VALUES ($1, $2, $3, $4, $5, 'leverancier') RETURNING id",
+                [req.body.bedrag, req.body.omschrijving, req.body.datum, req.body.fk_partner, req.gebouw]);
 
   factuurID = results1.rows[0].id;
 
@@ -469,7 +468,18 @@ router.post('/facturen', verifyToken, async function (req,res){
 
 router.put('/facturen', verifyToken, (req, res) =>{
   console.log('put facturen')
-  console.log(req.body)
+
+  let queryString = "UPDATE facturen SET bedrag=$1, fk_partner=$2, omschrijving=$3, datum=$4, vervaldatum=$5 " +
+                    "WHERE id=$6"
+
+  pool.query(queryString, [req.body.bedrag, req.body.fk_partner, req.body.omschrijving,
+                            req.body.datum, req.body.vervaldatum, req.body.id], (error, results) =>{
+                              if(error){
+                                console.log(error)
+                              }else{
+                                res.status(200).send(results);
+                              }
+                            })
 })
 
 
