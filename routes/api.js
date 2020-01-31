@@ -40,8 +40,8 @@ const pool = new Pool({
   user: config.dbuser,
   host: config.dbhost,
   database: 'api',
-  password: config.dbpassword,
-  port: config.dbport,
+  password: '',
+  port: 5432,
 })
 
 //---EMAIL---
@@ -49,8 +49,8 @@ const pool = new Pool({
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: config.mailuser,
-    pass: config.mailpassword
+    user: 'janhendrikblonde@gmail.com',
+    pass: ''
   }
 });
 
