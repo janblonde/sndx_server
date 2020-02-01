@@ -445,8 +445,8 @@ router.post('/facturen', verifyToken, async function (req,res){
 
   factuurID = null;
 
-  const results1 = await pool.query("INSERT INTO facturen (bedrag, omschrijving, datum, fk_partner, fk_gebouw, type) VALUES ($1, $2, $3, $4, $5, 'leverancier') RETURNING id",
-                [req.body.bedrag, req.body.omschrijving, req.body.datum, req.body.fk_partner, req.gebouw]);
+  const results1 = await pool.query("INSERT INTO facturen (bedrag, omschrijving, datum, vervaldatum, fk_partner, fk_gebouw, type) VALUES ($1, $2, $3, $4, $5, $6, 'leverancier') RETURNING id",
+                [req.body.bedrag, req.body.omschrijving, req.body.datum, req.body.vervaldatum, req.body.fk_partner, req.gebouw]);
 
   factuurID = results1.rows[0].id;
 
@@ -529,39 +529,6 @@ router.put('/instellingen', verifyToken, (req, res) => {
                                 res.status(200).send(results);
                               }
                             })
-
-  // console.log("post agenda")
-  // let date = new Date();
-  // let month = date.getMonth()
-  // let year = date.getFullYear()
-  //
-  // let periodiciteit = req.body.periodiciteit
-  // let dag = req.body.voorschotdag
-  //
-  // for(var i=0;i<10;i++){
-  //   var aMonth = parseInt(month) + 1 + i
-  //   if(aMonth==13){year++}
-  //   if(aMonth>12){aMonth = aMonth-12}
-  //
-  //   //voorschotten
-  //   var voorschotDate = new Date(year + ',' + aMonth +',' + dag)
-  //   console.log(voorschotDate)
-  //
-  //   //aanmaningen
-  //   var aDag = parseInt(dag) + 14
-  //   var aanmaningsDate = null
-  //   if (aDag<31){
-  //     aanmaningsDate = new Date(year + ',' + aMonth + ',' + aDag+1)
-  //   }else{
-  //     if((parseInt(aMonth)+1)==13){
-  //       aanmaningsDate = new Date(year + ',' + (parseInt(aMonth)+1).toString() + ',' + (aDag-31).toString())
-  //     }else{
-  //       aanmaningsDate = new Date(year+1 + ',' + "1" + ',' + (aDag-31).toString())
-  //     }
-  //   }
-  //   console.log(aanmaningsDate)
-
-  //}
 })
 
 router.get('/instellingen', verifyToken, (req,res) => {
