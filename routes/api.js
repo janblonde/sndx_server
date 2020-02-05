@@ -285,7 +285,7 @@ router.get('/uittreksel', verifyToken, (req,res)=>{
   console.log('get uittreksel');
   console.log(req.query.id);
 
-  let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, pa.naam as tegenpartij, bu.omschrijving, kt.naam as type FROM bankrekeninguittreksels as bu " +
+  let queryString = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, pa.naam as tegenpartij, bu.omschrijving, kt.naam as type, bu.fk_type as fk_type FROM bankrekeninguittreksels as bu " +
                     "LEFT OUTER JOIN partners as pa on bu.fk_partner = pa.id " +
                     "LEFT OUTER JOIN kosten_types as kt on bu.fk_type = kt.id " +
                     "WHERE bu.id = ($1);"
@@ -374,6 +374,18 @@ router.get('/kostentypes', verifyToken, (req,res) => {
               })
 })
 
+router.get('/alltypes', verifyToken, (req,res) => {
+  console.log('alltypes');
+  pool.query("SELECT id, naam from kosten_types WHERE fk_gebouw = $1 or fk_gebouw is Null",
+              [req.gebouw], (error, results) => {
+                if(error){
+                  console.log(error);
+                }else{
+                  res.status(200).send(results);
+                }
+              })
+})
+
 router.get('/facturen', verifyToken, (req,res) => {
   console.log('facturen');
 
@@ -432,6 +444,22 @@ router.get('/voorschotten', verifyToken, (req,res) => {
                     "FROM facturen as fa "+
                     "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
                     "WHERE fa.fk_gebouw = $1 and fa.type='voorschot' ORDER BY fa.datum";
+  pool.query(queryString, [req.gebouw], (error, results) => {
+                if(error){
+                  console.log(error);
+                }else{
+                  res.status(200).send(results.rows);
+                }
+              })
+})
+
+router.get('/openvoorschotten', verifyToken, (req,res) => {
+  console.log('facturen');
+
+  let queryString = "SELECT fa.id, fa.bedrag, pa.naam as partner, fa.omschrijving, fa.datum, fa.vervaldatum, fa.fk_uittreksel "+
+                    "FROM facturen as fa "+
+                    "LEFT OUTER JOIN partners AS pa ON fa.fk_partner = pa.id "+
+                    "WHERE fa.fk_gebouw = $1 and fa.type='voorschot' and fa.fk_uittreksel is Null ORDER BY fa.datum";
   pool.query(queryString, [req.gebouw], (error, results) => {
                 if(error){
                   console.log(error);
