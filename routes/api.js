@@ -201,8 +201,9 @@ router.get('/unit', verifyToken, (req, res) =>{
 
 router.post('/eigenaars', verifyToken, (req, res) => {
 
-  pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, fk_type, fk_gebouw) VALUES ($1, $2, $3, $4, 1, $5) RETURNING id",
-                [req.body.naam, req.body.voornaam, req.body.bankrnr, req.body.email, req.gebouw], (error, results) => {
+  pool.query("INSERT INTO partners (naam, voornaam, bankrnr, email, overgenomen_saldo_werk, overgenomen_saldo_reserve, fk_type, fk_gebouw) VALUES ($1, $2, $3, $4, $5, $6, 1, $7) RETURNING id",
+                [req.body.naam, req.body.voornaam, req.body.bankrnr,
+                   req.body.email, req.body.overgenomen_werkrekening, req.body.overgenomen_reserverekening, req.gebouw], (error, results) => {
                   if(error) {
                     console.log(error);
                   }else{
@@ -227,8 +228,9 @@ function createEigendom(req, res, eigenaarId, unitId) {
 router.put('/eigenaars', verifyToken, (req,res) => {
   console.log('put eigenaars');
 
-  pool.query("UPDATE partners SET naam=$1, voornaam=$2, email=$3, bankrnr=$4 WHERE id=$5 RETURNING id",
-                [req.body.naam, req.body.voornaam, req.body.email, req.body.bankrnr, req.body.id], (error, results) => {
+  pool.query("UPDATE partners SET naam=$1, voornaam=$2, email=$3, bankrnr=$4, overgenomen_saldo_werk=$5, overgenomen_saldo_reserve=$6 WHERE id=$7 RETURNING id",
+                [req.body.naam, req.body.voornaam, req.body.email,
+                   req.body.bankrnr, req.body.overgenomen_werkrekening, req.body.overgenomen_reserverekening, req.body.id], (error, results) => {
                   if(error) {
                     console.log(error);
                   }else{
@@ -240,7 +242,11 @@ router.put('/eigenaars', verifyToken, (req,res) => {
 router.get('/eigenaar', verifyToken, (req, res) =>{
   console.log('get unit');
 
-  pool.query('SELECT id, naam, voornaam, email, bankrnr from partners WHERE id = $1', [req.query.id], (error, results) => {
+  let queryString = "SELECT id, naam, voornaam, email,"+
+                    "overgenomen_saldo_werk as overgenomen_werkrekening, "+
+                    "overgenomen_saldo_reserve as overgenomen_reserverekening, bankrnr from partners WHERE id = $1"
+
+  pool.query(queryString, [req.query.id], (error, results) => {
     if(error) {
       console.log(error)
     }else{
@@ -544,11 +550,11 @@ router.post('/instellingen', verifyToken, (req, res) => {
 router.put('/instellingen', verifyToken, (req, res) => {
 
   const queryString = "UPDATE instellingen SET adres=$1, periodiciteit_voorschot=$2, dag_voorschot=$3, " +
-                      "kosten=$4, werkrekeningnummer=$5, overgenomen_werkrekening=$6, reserverekeningnummer=$7, " +
-                      "overgenomen_reserverekening=$8 WHERE fk_gebouw=$9"
+                      "kosten=$4, nieuw=$5, werkrekeningnummer=$6, overgenomen_werkrekening=$7, reserverekeningnummer=$8, " +
+                      "overgenomen_reserverekening=$9 WHERE fk_gebouw=$10"
 
   pool.query(queryString, [req.body.adres, req.body.periodiciteit, req.body.voorschotdag,
-                            req.body.kosten, req.body.werkrekeningnummer,
+                            req.body.kosten, req.body.nieuw, req.body.werkrekeningnummer,
                             req.body.overgenomen_werkrekening, req.body.reserverekeningnummer,
                             req.body.overgenomen_reserverekening, req.gebouw], (error, results) => {
                               if(error){
@@ -605,6 +611,43 @@ router.get('/reserverekeningsaldo', verifyToken, (req,res)=>{
     if(error) console.log(error)
     else res.status(200).send(results)
   })
+})
+
+router.get('/setup', async function(req, res) {
+
+  //check instellingen
+  let instellingenFilled = true;
+
+  let queryString = "SELECT * FROM instellingen WHERE fk_gebouw = 11";
+
+  const results = await pool.query(queryString)
+
+  if(!results.rows[0]){
+    instellingenFilled = false;
+  }else{
+    console.log(results.rows[0])
+
+    if(!results.rows[0].adres || results.rows[0].adres == '') instellingenFilled = false
+    if(!results.rows[0].periodiciteit_voorschot || results.rows[0].periodiciteit_voorschot == '') instellingenFilled = false
+    if(!results.rows[0].dag_voorschot || results.rows[0].dag_voorschot == '') instellingenFilled = false
+    if(!results.rows[0].werkrekeningnummer || results.rows[0].werkrekeningnummer == '') instellingenFilled = false
+    if(!results.rows[0].reserverekeningnummer || results.rows[0].reserverekeningnummer == '') instellingenFilled = false
+
+    if(!results.rows[0].nieuw){
+      if(results.rows[0].overgenomen_werkrekening == 0  && results.rows[0].overgenomen_reserverekening == 0) instellingenFilled = false
+    }
+
+  }
+
+  if(instellingenFilled)
+    res.status(200).send('instellingen');
+  else
+    res.status(200).send(false);
+
+
+  //check units, eigenaars en duizendste
+
+
 })
 
 
