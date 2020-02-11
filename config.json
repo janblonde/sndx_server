@@ -1,0 +1,9 @@
+{
+  "dbuser": "postgres",
+  "dbpassword":"mauroferre",
+  "dbhost":"sndx.be",
+  "dbport": "5432",
+  "mailuser":"janhendrikblonde@gmail.com",
+  "mailpassword":"coPRbi12go",
+  "key": "secretKey"
+}

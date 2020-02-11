@@ -532,11 +532,11 @@ router.get('/leveranciers', verifyToken, (req,res) => {
 router.post('/instellingen', verifyToken, (req, res) => {
 
   const queryString = "INSERT INTO instellingen (adres, periodiciteit_voorschot, dag_voorschot, " +
-                      "kosten, werkrekeningnummer, overgenomen_werkrekening, reserverekeningnummer, " +
-                      "overgenomen_reserverekening, fk_gebouw) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id"
+                      "kosten, nieuw, werkrekeningnummer, overgenomen_werkrekening, reserverekeningnummer, " +
+                      "overgenomen_reserverekening, fk_gebouw) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id"
 
   pool.query(queryString, [req.body.adres, req.body.periodiciteit, req.body.voorschotdag,
-                            req.body.kosten, req.body.werkrekeningnummer,
+                            req.body.kosten, req.body.nieuw, req.body.werkrekeningnummer,
                             req.body.overgenomen_werkrekening, req.body.reserverekeningnummer,
                             req.body.overgenomen_reserverekening, req.gebouw], (error, results) => {
                               if(error){
@@ -613,19 +613,19 @@ router.get('/reserverekeningsaldo', verifyToken, (req,res)=>{
   })
 })
 
-router.get('/setup', async function(req, res) {
+router.get('/setup', verifyToken, async function(req, res) {
+  console.log('get setup')
 
   //check instellingen
   let instellingenFilled = true;
 
-  let queryString = "SELECT * FROM instellingen WHERE fk_gebouw = 11";
+  let queryString = "SELECT * FROM instellingen WHERE fk_gebouw = $1";
 
-  const results = await pool.query(queryString)
+  const results = await pool.query(queryString, [req.gebouw]);
 
   if(!results.rows[0]){
     instellingenFilled = false;
   }else{
-    console.log(results.rows[0])
 
     if(!results.rows[0].adres || results.rows[0].adres == '') instellingenFilled = false
     if(!results.rows[0].periodiciteit_voorschot || results.rows[0].periodiciteit_voorschot == '') instellingenFilled = false
@@ -639,15 +639,61 @@ router.get('/setup', async function(req, res) {
 
   }
 
-  if(instellingenFilled)
-    res.status(200).send('instellingen');
-  else
-    res.status(200).send(false);
+  //check units en duizendsten
+  let unitsFilled = true;
 
+  let queryUnits = "SELECT SUM(duizendste), COUNT(*) FROM units WHERE fk_gebouw = $1"
 
-  //check units, eigenaars en duizendste
+  const resultUnits = await pool.query(queryUnits, [req.gebouw]);
 
+  if(!resultUnits.rows[0] || !resultUnits.rows[0].sum){
+    unitsFilled = false
+  }else{
+    //console.log(resultUnits.rows[0])
+    if(resultUnits.rows[0].sum!=1000) unitsFilled = false
+  }
 
+  //eigenaars
+  let eigenaarsFilled = true
+
+  let queryEigenaars = "SELECT * FROM partners WHERE fk_gebouw = $1 AND fk_type = 1"
+
+  const resultEigenaars = await pool.query(queryEigenaars, [req.gebouw]);
+
+  //console.log(resultEigenaars.rows)
+
+  if(!resultEigenaars.rows || resultEigenaars.rows.length==0){
+    eigenaarsFilled = false
+  }else {
+    let eigenaarsCount = 0;
+    for(let element of resultEigenaars.rows){
+      eigenaarsCount++
+      if(!element.naam || element.naam =='') eigenaarsFilled = false
+      if(!element.bankrnr || element.bankrnr=='') eigenaarsFilled = false
+
+      //console.log(element)
+    }
+    if (!resultUnits.rows[0] || !resultUnits.rows[0].count || eigenaarsCount<resultUnits.rows[0].count)
+      eigenaarsFilled = false
+  }
+
+  console.log(instellingenFilled)
+  console.log(unitsFilled)
+  console.log(eigenaarsFilled)
+
+  if(instellingenFilled&&unitsFilled&&eigenaarsFilled){
+    res.status(200).send({'setup':'true'});
+  }else{
+    if(eigenaarsFilled){
+      res.status(200).send({'setup':'eigenaars'});
+    }else if(unitsFilled){
+      res.status(200).send({'setup':'units'});
+    }else if(instellingenFilled){
+      res.status(200).send({'setup':'instellingen'});
+    }else{
+      res.status(200).send({'setup':'false'})
+    }
+  }
 })
 
 
