@@ -673,11 +673,11 @@ router.get('/leveranciers', verifyToken, (req,res) => {
 router.put('/instellingen', verifyToken, (req, res) => {
 
   const queryString = "UPDATE gebouwen SET adres=$1, periodiciteit_voorschot=$2, dag_voorschot=$3, " +
-                      "kosten=$4, nieuw=$5, werkrekeningnummer=$6, overgenomen_werkrekening=$7, reserverekeningnummer=$8, " +
-                      "overgenomen_reserverekening=$9 WHERE id=$10"
+                      "kosten=$4, nieuw=$5, overnamedatum=$6, werkrekeningnummer=$7, overgenomen_werkrekening=$8, reserverekeningnummer=$9, " +
+                      "overgenomen_reserverekening=$10 WHERE id=$11"
 
   pool.query(queryString, [req.body.adres, req.body.periodiciteit, req.body.voorschotdag,
-                            req.body.kosten, req.body.nieuw, req.body.werkrekeningnummer,
+                            req.body.kosten, req.body.nieuw, req.body.overnamedatum, req.body.werkrekeningnummer,
                             req.body.overgenomen_werkrekening, req.body.reserverekeningnummer,
                             req.body.overgenomen_reserverekening, req.gebouw], (error, results) => {
                               if(error){
@@ -787,6 +787,7 @@ router.get('/setup', verifyToken, async function(req, res) {
 
     if(!results.rows[0].nieuw){
       if(results.rows[0].overgenomen_werkrekening == 0  && results.rows[0].overgenomen_reserverekening == 0) instellingenFilled = false
+      if(results.rows[0].overnamedatum == '') instellingenFilled = false
     }
 
   }
