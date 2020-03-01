@@ -90,7 +90,8 @@ router.get('/', (req,res) => {
   res.send('From API route');
 })
 
-router.post('/mail',(req,res)=>{
+router.get('/mail',(req,res)=>{
+  console.log(req.query)
 
   let options = {
     from:'',
@@ -99,8 +100,12 @@ router.post('/mail',(req,res)=>{
     text:''
   }
 
-  if(req.body)
-    options = req.body
+  if(req.query){
+    options.from = req.query.email
+    options.to = 'jan.blonde@icloud.com'
+    options.subject = req.query.name
+    options.text = req.query.message
+  }
 
   console.log(options)
   transporter.sendMail(options, function(error,info){
