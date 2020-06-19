@@ -46,8 +46,25 @@ const pool = new Pool({
 
 //---EMAIL---
 
+// const transporter = nodemailer.createTransport({
+//   service: 'gmail',
+//   auth: {
+//     user: config.mailuser,
+//     pass: config.mailpassword
+//   }
+// });
+//
+// const mailOptions = {
+//   from: 'janhendrikblonde@gmail.com',
+//   to: 'jan.blonde@icloud.com',
+//   subject: 'Sending Email using Node.js',
+//   text: 'That was easy!'
+// };
+
+
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp-auth.mailprotect.be',
+  port: 465,
   auth: {
     user: config.mailuser,
     pass: config.mailpassword
@@ -55,12 +72,11 @@ const transporter = nodemailer.createTransport({
 });
 
 const mailOptions = {
-  from: 'janhendrikblonde@gmail.com',
+  from: 'info@sndx.be',
   to: 'jan.blonde@icloud.com',
   subject: 'Sending Email using Node.js',
   text: 'That was easy!'
 };
-
 
 function verifyToken(req, res, next){
   if(!req.headers.authorization){
@@ -715,8 +731,8 @@ router.post('/voorschotten', verifyToken, async function (req,res){
 
   voorschotID = null;
 
-  const results1 = await pool.query("INSERT INTO voorschotten (bedrag, omschrijving, datum, vervaldatum, fk_partner, fk_unit, fk_gebouw, betaald) VALUES ($1, $2, $3, $4, $5, $6, $7, false ) RETURNING id",
-                [req.body.bedrag, req.body.omschrijving, req.body.datum, req.body.vervaldatum, req.body.fk_partner, req.body.fk_unit, req.gebouw]);
+  const results1 = await pool.query("INSERT INTO voorschotten (bedrag, omschrijving, datum, vervaldatum, fk_partner, fk_unit, fk_gebouw, type, betaald) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false ) RETURNING id",
+                [req.body.bedrag, req.body.omschrijving, req.body.datum, req.body.vervaldatum, req.body.fk_partner, req.body.fk_unit, req.gebouw, req.body.type]);
 
   voorschotID = results1.rows[0].id;
 
@@ -949,9 +965,10 @@ router.post('/verbruikitems', verifyToken, (req,res) => {
 router.get('/verbruiken', verifyToken, (req,res) => {
   console.log('get verbruiken');
 
-  let queryString = "SELECT ve.id, ve.afgerekend, ve.fk_kostentype, ko.naam AS kostentype "+
+  let queryString = "SELECT ve.id, ve.afgerekend, ve.fk_kostentype, ko.naam AS kostentype, ve.fk_partner, pa.naam AS partner, datum "+
                     "FROM verbruiken as ve "+
                     "LEFT OUTER JOIN kosten_types AS ko ON ve.fk_kostentype = ko.id "+
+                    "LEFT OUTER JOIN partners AS pa ON ve.fk_partner = pa.id "+
                     "WHERE ve.fk_gebouw = $1 ORDER BY id";
   pool.query(queryString, [req.gebouw], (error, results) => {
                 if(error){
@@ -965,9 +982,10 @@ router.get('/verbruiken', verifyToken, (req,res) => {
 router.get('/verbruik', verifyToken, (req,res) => {
   console.log('get verbruik');
 
-  let queryString = "SELECT ve.id, ve.afgerekend, ve.totaalverbruik, ve.fk_kostentype, ko.naam AS kostentype "+
+  let queryString = "SELECT ve.id, ve.afgerekend, ve.totaalverbruik, ve.fk_kostentype, ko.naam AS kostentype, ve.fk_partner, pa.naam AS partner, datum "+
                     "FROM verbruiken as ve "+
                     "LEFT OUTER JOIN kosten_types AS ko ON ve.fk_kostentype = ko.id "+
+                    "LEFT OUTER JOIN partners AS pa ON ve.fk_partner = pa.id "+
                     "WHERE ve.id = $1";
   pool.query(queryString, [req.query.id], (error, results) => {
                 if(error){
@@ -1254,6 +1272,9 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
 
   const result2 = await pool.query(queryString, [req.gebouw]);
 
+  let qVerdeelsleutel = "SELECT verdeelsleutel FROM gebouwen WHERE id=$1"
+  const rVerdeelsleutel = await pool.query(qVerdeelsleutel, [req.gebouw])
+
   for(let element of result2.rows){
     let myObj = rapport.get(element.eigenaar);
     myObj.verdeelsleutel = myObj.verdeelsleutel + element.duizendste
@@ -1266,7 +1287,7 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
   const resultsBankrekeningnr = await pool.query(queryBankrekeningnr, [req.gebouw])
 
   //voorschotten en kosten
-  let queryString2 = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type, bu.fk_factuur as factuur FROM bankrekeninguittreksels as bu " +
+  let queryString2 = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type FROM bankrekeninguittreksels as bu " +
                     "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
                     "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
                     "WHERE bu.bankrekening = ($1) AND bu.fk_gebouw=$2;"
@@ -1283,7 +1304,7 @@ router.get('/werkrekeningrapport', verifyToken, async function(req, res) {
     }else{
       //toekennen aan iedere eigenaar
       rapport.forEach(function(value,key){
-        let verdeling = (element.bedrag*value.verdeelsleutel)/1000;
+        let verdeling = (element.bedrag*value.verdeelsleutel)/parseFloat(rVerdeelsleutel.rows[0].verdeelsleutel.toString());
         value.uitgaven = value.uitgaven + verdeling
         rapport.set(key,value);
       });
@@ -1339,7 +1360,7 @@ router.get('/inkomstenrapport', verifyToken, async function(req, res) {
   const resBankrekeningnr = await pool.query(queryBankrekeningnr, [req.gebouw])
 
   //loop over uittreksels
-  let queryString2 = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type, bu.fk_factuur as factuur FROM bankrekeninguittreksels as bu " +
+  let queryString2 = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type FROM bankrekeninguittreksels as bu " +
                     "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
                     "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
                     "WHERE bu.bankrekening = ($1) AND bu.fk_gebouw = $2;"
@@ -1417,7 +1438,7 @@ router.get('/uitgavenrapport', verifyToken, async function(req, res) {
   const resBankrekeningnr = await pool.query(queryBankrekeningnr, [req.gebouw])
 
   //loop over uittreksels
-  let queryString2 = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type, bu.fk_factuur as factuur FROM bankrekeninguittreksels as bu " +
+  let queryString2 = "SELECT bu.id, bu.datum, bu.bedrag, bu.tegenrekening, p.naam as tegenpartij, bu.omschrijving, kt.naam as type FROM bankrekeninguittreksels as bu " +
                     "LEFT OUTER JOIN kosten_types as kt ON bu.fk_type = kt.id " +
                     "LEFT OUTER JOIN partners as p ON bu.fk_partner = p.id " +
                     "WHERE bu.bankrekening = ($1) AND bu.fk_gebouw = $2;"
@@ -1481,9 +1502,9 @@ router.get('/balans', verifyToken, async function(req, res) {
   let rapport = {};
 
   //openstaande voorschotten
-  let queryString = "SELECT facturen.id, facturen.bedrag, partners.naam FROM facturen "+
-                    "LEFT OUTER JOIN partners ON facturen.fk_partner = partners.id "+
-                    "WHERE facturen.fk_gebouw = $1 AND facturen.type='voorschot' AND facturen.fk_uittreksel IS NULL";
+  let queryString = "SELECT voorschotten.id, voorschotten.bedrag, partners.naam FROM voorschotten "+
+                    "LEFT OUTER JOIN partners ON voorschotten.fk_partner = partners.id "+
+                    "WHERE voorschotten.fk_gebouw = $1 AND voorschotten.betaald=false";
 
   const result = await pool.query(queryString, [req.gebouw]);
 
@@ -1521,7 +1542,7 @@ router.get('/balans', verifyToken, async function(req, res) {
   //openstaande leveranciers
   let queryString3 = "SELECT facturen.id, facturen.bedrag, partners.naam FROM facturen "+
                     "LEFT OUTER JOIN partners ON facturen.fk_partner = partners.id "+
-                    "WHERE facturen.fk_gebouw = $1 AND facturen.type='leverancier' AND facturen.fk_uittreksel IS NULL";
+                    "WHERE facturen.fk_gebouw = $1 AND facturen.betaald=false";
 
   const result3 = await pool.query(queryString3, [req.gebouw]);
 
@@ -1529,8 +1550,8 @@ router.get('/balans', verifyToken, async function(req, res) {
   rapport.leveranciers_detail = []
 
   for (let element of result3.rows){
-    rapport.leveranciers_detail.push({'naam':element.naam,'bedrag':-element.bedrag});
-    leveranciersTotaal = leveranciersTotaal + parseFloat(element.bedrag);
+    rapport.leveranciers_detail.push({'naam':element.naam,'bedrag':element.bedrag});
+    leveranciersTotaal = leveranciersTotaal - parseFloat(element.bedrag);
   }
 
   rapport.leveranciers = -leveranciersTotaal;
@@ -1541,7 +1562,7 @@ router.get('/balans', verifyToken, async function(req, res) {
 
   rapport.totaal_passiva = parseFloat(rapport.leveranciers) + parseFloat(rapport.teveelvoorschotten)
 
-  console.log(rapport)
+  //console.log(rapport)
 
   // let rapport = {'vorderingen': {
   //                   'totaal':100,
@@ -1703,27 +1724,34 @@ router.get('/preview', verifyToken, async function(req,res){
       //push totaal
       newResults.push([unit, 'Totaal', '','','', unitTotaal])
 
-      //get gefactureerde voorschotten voor deze unit
+      //get betaalde voorschotten voor deze unit
       let qGefactureerd = "SELECT SUM(vo.bedrag) FROM voorschotten AS vo "+
                           "LEFT OUTER JOIN units AS un ON vo.fk_unit = un.id "+
-                          "WHERE vo.fk_gebouw = $1 AND un.naam = $2 AND datum >= ($3) AND datum <= ($4) AND betaald=true"
+                          "WHERE vo.fk_gebouw = $1 AND un.naam = $2 AND datum >= ($3) AND datum <= ($4) AND betaald=true AND vo.type='voorschot'"
 
       let rGefactureerd = await pool.query(qGefactureerd, [req.gebouw, unit, req.query.van, req.query.tot])
-      newResults.push([unit, 'Gefactureerd voorschot', '','','', -rGefactureerd.rows[0].sum || '0'])
+      newResults.push([unit, 'Betaalde voorschotten', '','','', -rGefactureerd.rows[0].sum || '0'])
 
       //bereken subtotaal
       newResults.push([unit, 'Subtotaal', '','','', unitTotaal - rGefactureerd.rows[0].sum || '0'])
 
-      //get openstaande voorschotten voor deze unit
+      //get openstaande voorschotten/afrekeningen voor deze unit
       let qOpen = "SELECT SUM(vo.bedrag) FROM voorschotten AS vo "+
                           "LEFT OUTER JOIN units AS un ON vo.fk_unit = un.id "+
-                          "WHERE vo.fk_gebouw = $1 AND un.naam = $2 AND datum >= ($3) AND datum <= ($4) AND betaald=false"
+                          "WHERE vo.fk_gebouw = $1 AND un.naam = $2 AND betaald=false"
 
-      let rOpen = await pool.query(qOpen, [req.gebouw, unit, req.query.van, req.query.tot])
+      let rOpen = await pool.query(qOpen, [req.gebouw, unit])
       newResults.push([unit, 'Openstaande voorschotten', '','','', rOpen.rows[0].sum || '0'])
 
+      let gefactureerd = 0
+      let open = 0
+
+      if(rGefactureerd.rows[0].sum) gefactureerd = parseFloat(rGefactureerd.rows[0].sum.toString())
+      if(rOpen.rows[0].sum) open = parseFloat(rOpen.rows[0].sum.toString())
+
+
       //bereken te betalen bedrag
-      newResults.push([unit, 'Te betalen', '','','', unitTotaal - rGefactureerd.rows[0].sum + rOpen.rows[0].sum])
+      newResults.push([unit, 'Te betalen', '','','', unitTotaal - gefactureerd + open])
 
       newResults.push(['','','','','',''])
 
@@ -1743,13 +1771,13 @@ router.get('/preview', verifyToken, async function(req,res){
   //get gefactureerde voorschotten voor deze unit
   let qGefactureerd = "SELECT SUM(vo.bedrag) FROM voorschotten AS vo "+
                       "LEFT OUTER JOIN units AS un ON vo.fk_unit = un.id "+
-                      "WHERE vo.fk_gebouw = $1 AND un.naam = $2 AND datum >= ($3) AND datum <= ($4) AND betaald=true"
+                      "WHERE vo.fk_gebouw = $1 AND un.naam = $2 AND datum >= ($3) AND datum <= ($4) AND betaald=true AND vo.type='voorschot'"
 
   let rGefactureerd = await pool.query(qGefactureerd, [req.gebouw, unit, req.query.van, req.query.tot])
-  newResults.push([unit, 'Gefactureerd voorschot', '','','', rGefactureerd.rows[0].sum || '0'])
+  newResults.push([unit, 'Betaalde voorschotten', '','','', -rGefactureerd.rows[0].sum || '0'])
 
   //bereken subtotaal
-  newResults.push([unit, 'Subtotaal', '','','', unitTotaal + rGefactureerd.rows[0].sum || '0'])
+  newResults.push([unit, 'Subtotaal', '','','', unitTotaal - rGefactureerd.rows[0].sum || '0'])
 
   //get openstaande voorschotten voor deze unit
   let qOpen = "SELECT SUM(vo.bedrag) FROM voorschotten AS vo "+
@@ -1760,7 +1788,7 @@ router.get('/preview', verifyToken, async function(req,res){
   newResults.push([unit, 'Openstaande voorschotten', '','','', rOpen.rows[0].sum || '0'])
 
   //bereken te betalen bedrag
-  newResults.push([unit, 'Te betalen', '','','', unitTotaal + rGefactureerd.rows[0].sum - rOpen.rows[0].sum])
+  newResults.push([unit, 'Te betalen', '','','', unitTotaal - rGefactureerd.rows[0].sum + rOpen.rows[0].sum])
 
   res.status(200).send(newResults)
 
@@ -1769,27 +1797,239 @@ router.get('/preview', verifyToken, async function(req,res){
 router.post('/validate', verifyToken, async function(req,res){
   console.log('post validate');
 
-  console.log(req.body)
-
   const qAfrekening = "INSERT INTO afrekeningen(van, tot, fk_gebouw) VALUES ($1, $2, $3) RETURNING id"
   const rAfrekening = await pool.query(qAfrekening, [req.body.van, req.body.tot, req.gebouw])
 
-  req.body.items.forEach((element)=>{
+  for(let element of req.body.items){
     const qAfrekeningItem = "INSERT INTO afrekening_items (fk_afrekening, unit, type, totaalbedrag, verdeling_teller, verdeling_noemer, bedrag) "+
                             "VALUES ($1, $2, $3, $4, $5, $6, $7)"
-    const rAfrekeningItem = pool.query(qAfrekeningItem, [rAfrekening.rows[0].id, element[0], element[1], element[2], element[3], element[4], element[5]])
+    const rAfrekeningItem = await pool.query(qAfrekeningItem, [rAfrekening.rows[0].id, element[0], element[1], element[2], element[3], element[4], element[5]])
+
+    if(element[1]=='Subtotaal'){
+      //get current date en vervaldatum
+      let today = new Date().toISOString().slice(0, 10)
+
+      //get fk_unit and fk_partner
+      const qUnit = "SELECT * FROM units WHERE naam = $1 AND fk_gebouw = $2"
+      const rUnit = await pool.query(qUnit, [element[0], req.gebouw])
+
+      const qEigenaar = "SELECT * FROM eigendom WHERE unit=$1 AND fk_gebouw=$2"
+      const rEigenaar = await pool.query(qEigenaar, [rUnit.rows[0].id, req.gebouw])
+
+      const qVoorschotten = "INSERT INTO voorschotten (bedrag, fk_partner, omschrijving, fk_gebouw, datum, vervaldatum, betaald, fk_unit, type) "+
+                            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id"
+      const rVoorschotten = await pool.query(qVoorschotten, [element[5], rEigenaar.rows[0].eigenaar, 'Afrekening', req.gebouw,
+                                                            today, today, 'false', rUnit.rows[0].id,'afrekening'])
+    }
+  }
+
+  const qVerbruiken = "UPDATE verbruiken SET afgerekend = true WHERE fk_gebouw = $1"
+  const rVerbruiken = await pool.query(qVerbruiken, [req.gebouw])
+
+  res.status(200).send(rAfrekening)
+})
+
+router.get('/generatepdf', verifyToken, async function(req,res){
+  console.log('GET generatepdf')
+
+  const PDFDocument = require('pdfkit');
+
+  let doc = null;
+
+  //get units
+  const qUnits = "SELECT DISTINCT unit AS naam FROM afrekening_items WHERE fk_afrekening = $1 AND unit != ''"
+  const rUnits = await pool.query(qUnits, [req.query.afrekeningID])
+
+  //get afrekening
+  const qAfrekening = "SELECT * FROM afrekeningen WHERE id = $1"
+  const rAfrekening = await pool.query(qAfrekening, [req.query.afrekeningID])
+
+  vanDate = new Date(rAfrekening.rows[0].van)
+  let vDag = vanDate.getDate()
+  if(vDag.length==1)
+    vDag = '0'+vDag
+  let vMaand = vanDate.getMonth()+1
+  if(vMaand.length==1)
+    vMaand = '0'+vMaand
+  let vJaar = vanDate.getFullYear()
+  let van = vDag + "/" + vMaand + "/" + vJaar
+
+  totDate = new Date(rAfrekening.rows[0].tot)
+  let tDag = totDate.getDate()
+  if(tDag.length==1)
+    tDag = '0'+tDag
+  let tMaand = totDate.getMonth()+1
+  if(tMaand.length==1)
+    tMaand = '0'+tMaand
+  let tJaar = totDate.getFullYear()
+  let tot = tDag + "/" + tMaand + "/" + tJaar
+
+  //loop over units
+  for (let unit of rUnits.rows){
+
+    doc = new PDFDocument;
+    doc.pipe(fs.createWriteStream('generatedpdfs/A'+req.query.afrekeningID+'_Unit'+unit.naam+'.pdf'));
+
+    //get owner gegevens + print
+    const qOwner = "SELECT pa.naam, pa.email " +
+                    "FROM units AS un " +
+                    "LEFT OUTER JOIN eigendom AS ei ON un.id =  ei.unit " +
+                    "LEFT OUTER JOIN partners AS pa ON ei.eigenaar = pa.id " +
+                    "WHERE un.naam=($1) AND un.fk_gebouw=$2"
+    const rOwner = await pool.query(qOwner, [unit.naam, req.gebouw])
+
+    doc.fontSize(14)
+       .text(rOwner.rows[0].naam,50,50)
+       .text(rOwner.rows[0].email,50,70)
+
+    doc.fontSize(21)
+       .text('Afrekening unit '+unit.naam+' van '+van+' tot '+tot,100,120)
+
+    //print de tabel
+    const qItems = "SELECT * FROM afrekening_items WHERE fk_afrekening = $1 AND unit = $2 ORDER BY id"
+    const rItems = await pool.query(qItems, [req.query.afrekeningID, unit.naam])
+    let y = 200
+
+    doc.font('Helvetica-Bold')
+      .fontSize(14)
+      .text('Kostentype',50,180)
+      .text('Totaalbedrag',200,180)
+      .text('Verdeelsleutel',350,180)
+      .text('Bedrag',455,180)
+
+    let sign = "betalen"
+
+    for(let item of rItems.rows){
+
+      if(item.totaalbedrag)
+        item.totaalbedrag = parseFloat(item.totaalbedrag).toFixed(2)
+
+      if(item.bedrag)
+        item.bedrag = parseFloat(item.bedrag).toFixed(2)
+
+      let verdeelsleutel = ""
+      if(item.verdeling_teller){
+        verdeelsleutel = item.verdeling_teller+"/"+item.verdeling_noemer
+      }
+
+      doc.fontSize(14)
+      let lTotaalbedrag = doc.widthOfString(item.totaalbedrag)
+      let lBedrag = doc.widthOfString(item.bedrag)
+      let lVerdeelsleutel = doc.widthOfString(verdeelsleutel)
+
+      if(item.type=='Totaal'||item.type=='Te betalen')
+        doc.font('Helvetica-Bold')
+      else
+        doc.font('Helvetica')
+
+      if(item.type=='Totaal')
+        y=y+10
+
+      if(item.type=='Te betalen'){
+        if(item.bedrag<0) sign = "ontvangen"
+      }
+
+      doc.fontSize(14)
+         .text(item.type,50,y)
+         .text(item.totaalbedrag,280-lTotaalbedrag,y)
+         .text(verdeelsleutel,440-lVerdeelsleutel,y)
+         .text(item.bedrag,500-lBedrag,y)
+
+      y=y+20
+    }
+
+    //get rekeningnummer gegevens + print
+    const qRekeningnummer = "SELECT werkrekeningnummer FROM gebouwen WHERE id = $1"
+    const rRekeningnummer = await pool.query(qRekeningnummer, [req.gebouw])
+
+    let textRRN = "Gelieve dit bedrag te betalen binnen 14 dagen op rekeningnummer " + rRekeningnummer.rows[0].werkrekeningnummer
+    if(sign=="ontvangen")
+      textRRN = "We storten bovenstaand bedrag terug op uw rekening binnen 14 dagen"
+
+    doc.font('Helvetica')
+       .text(textRRN,50,y+40)
+
+    doc.end()
+
+    let mailText = 'Geachte '+rOwner.rows[0].naam+'\n\n'+
+                   'Als bijlage vindt u de afrekening voor appartement '+unit.naam+
+                   ' voor de periode van '+van+' tot '+tot+'.\n\n'
+
+    //send mail
+    let options = {
+      from:'janhendrikblonde@gmail.com',
+      to:rOwner.rows[0].email,
+      subject:'Afrekening '+unit.naam,
+      text:mailText,
+      attachments: [
+        {
+          filename: 'afrekening.pdf',
+          path: 'generatedpdfs/A'+req.query.afrekeningID+'_Unit'+unit.naam+'.pdf'
+        }
+      ]
+    }
+
+    transporter.sendMail(options, function(error,info){
+      if(error){
+        console.log(error);
+      }else{
+        console.log('Email sent: ' + info.response);
+        res.status(200).send('OK');
+      }
+    })
+
+  }
+
+  res.status(200).send({'status':'OK'})
+
+})
+
+router.get('/afrekeningen', verifyToken, function(req,res){
+  console.log('GET afrekeningen')
+
+  const qAfrekeningen = "SELECT * FROM afrekeningen WHERE fk_gebouw=$1 ORDER BY id ASC"
+  pool.query(qAfrekeningen, [req.gebouw], (error, results) => {
+                if(error){
+                  console.log(error);
+                }else{
+                  res.status(200).send(results.rows);
+                }
+              })
+
+})
+
+router.get('/afrekeningdetails', verifyToken, function(req,res){
+  console.log('GET afrekeningdetails')
+
+  const qAfrekening = "SELECT * FROM afrekening_items WHERE fk_afrekening = $1"
+  pool.query(qAfrekening, [req.query.id],(error, results)=>{
+    if(error) console.log(error)
+    else res.status(200).send(results.rows)
   })
 
-  // req.body.forEach((element)=>{
-  //
-  //   pool.query("INSERT INTO verbruik_items (verbruik_fk, unit_fk, verbruikt) VALUES ($1,$2,$3) RETURNING id",
-  //           [element.verbruik_fk, element.unit_fk, element.verbruikt], (error, results) =>{
-  //             if(error) console.log(error)
-  //             else console.log(results)
-  //           }
-  //         )
-  // })
-  res.status(200).send({'status':'OK'})
+})
+
+router.get('/afrekening', verifyToken, function(req,res){
+  const qAfrekening = "SELECT * FROM afrekeningen WHERE id=$1"
+  pool.query(qAfrekening, [req.query.id],(error, results)=>{
+    if(error) console.log(error)
+    else res.status(200).send(results.rows[0])
+  })
+
+})
+
+router.get('/latestafrekening', verifyToken, function(req,res){
+  console.log('GET afrekeningen')
+
+  const qAfrekeningen = "SELECT MAX(tot) AS maxdate FROM afrekeningen WHERE fk_gebouw=$1"
+  pool.query(qAfrekeningen, [req.gebouw], (error, results) => {
+                if(error){
+                  console.log(error);
+                }else{
+                  res.status(200).send(results.rows[0]);
+                }
+              })
+
 })
 
 //fileupload
@@ -1846,45 +2086,75 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
       .on("end", async function () {
         for(const data of fileRows){
 
-          if(rekeningnummers.has(data[0])){
+          let rekeningnummer, datum, bedrag, omschrijving, tegenrekening = ""
 
-            date= data[5].substr(6,4)+'/'+data[5].substr(3,2)+'/'+data[5].substr(0,2);
+          if(data.length==18){ //KBC
+            console.log('KBC')
+            rekeningnummer = data[0]
+            datum = data[5]
+            bedrag = data[8]
+            omschrijving = data[6]
+            tegenrekening = data[12]
+          }else if(data.length==8){ //FORTIS
+            console.log("fortis")
+            rekeningnummer = data[7]
+            datum = data[2]
+            bedrag = data[3]
+            omschrijving = data[6]
+            tegenrekening = data[5]
+          }else{
+            console.log('onbekend formaat')
+          }
+
+          if(rekeningnummers.has(rekeningnummer)){
+
+            date= datum.substr(6,4)+'/'+datum.substr(3,2)+'/'+datum.substr(0,2);
+
+            console.log(p_rekeningnummers.get(tegenrekening))
+            console.log(p_types.get(tegenrekening))
 
             let queryString = 'INSERT INTO bankrekeninguittreksels (datum, bedrag, omschrijving, tegenrekening, bankrekening, fk_partner, fk_type, fk_gebouw, linked) '+
                               'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false) RETURNING id';
             const results = await pool.query(queryString,[date,
-                                                          data[8].replace(",","."),
-                                                          data[6].substr(0,299),
-                                                          data[12],
-                                                          data[0],
-                                                          p_rekeningnummers.get(data[12]),
-                                                          p_types.get(data[12]),
+                                                          bedrag.replace(",","."),
+                                                          omschrijving.substr(0,299),
+                                                          tegenrekening,
+                                                          rekeningnummer,
+                                                          p_rekeningnummers.get(tegenrekening),
+                                                          p_types.get(tegenrekening),
                                                           req.gebouw])
 
             //check of het over een verdeling volgens verbruik gaat
             //SELECT * FROM kosten_types WHERE id = id
-            const verdeling_result = await pool.query('SELECT verdeling FROM kosten_types WHERE id=$1',[p_types.get(data[12])])
+            const verdeling_result = await pool.query('SELECT verdeling FROM kosten_types WHERE id=$1',[p_types.get(tegenrekening)])
 
             //check op verdeling = 'verbruik'
             if(verdeling_result.rows[0] && verdeling_result.rows[0].verdeling==='verbruik'){
 
-              //maak verbruiken aan
-              console.log('create verbruiken')
-              const ve_create = await pool.query('INSERT INTO verbruiken (afgerekend, fk_gebouw, fk_kostentype) VALUES ($1, $2, $3) RETURNING id',
-                                                                          ['false', req.gebouw, p_types.get(data[12])])
+              //check of er een niet-afgerekend verbruik bestaat voor dit kostentype
+              const ve_check = await pool.query('SELECT * FROM verbruiken WHERE fk_gebouw = $1 AND afgerekend = false AND fk_kostentype=$2',
+                                                [req.gebouw, p_types.get(tegenrekening)])
 
-              //loop over units
-              const units_result = await pool.query('SELECT * FROM units WHERE fk_gebouw = $1', [req.gebouw])
+              if(!ve_check.rows[0]){
 
-              for(let element of units_result.rows){
-                await pool.query('INSERT INTO verbruik_items (verbruik_fk, unit_fk, verbruikt) VALUES ($1, $2, $3)',
-                                                              [ve_create.rows[0].id, element.id, 0])
+                //maak verbruiken aan
+                console.log('create verbruiken')
+                const ve_create = await pool.query('INSERT INTO verbruiken (afgerekend, fk_gebouw, fk_kostentype, datum, fk_partner) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+                                                                            ['false', req.gebouw, p_types.get(tegenrekening), date, p_rekeningnummers.get(tegenrekening)])
+
+                //loop over units
+                const units_result = await pool.query('SELECT * FROM units WHERE fk_gebouw = $1', [req.gebouw])
+
+                for(let element of units_result.rows){
+                  await pool.query('INSERT INTO verbruik_items (verbruik_fk, unit_fk, verbruikt) VALUES ($1, $2, $3)',
+                                                                [ve_create.rows[0].id, element.id, 0])
+                }
               }
             }
 
             //check of dit een factuur betaald
-            let fk_partner = p_rekeningnummers.get(data[12]);
-            let betaald_bedrag = parseFloat(data[8].replace(",","."));
+            let fk_partner = p_rekeningnummers.get(tegenrekening);
+            let betaald_bedrag = parseFloat(bedrag.replace(",","."));
 
             const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM facturen WHERE betaald = false AND fk_partner = $1 AND fk_gebouw = $2 ORDER BY datum', [fk_partner, req.gebouw]);
 
