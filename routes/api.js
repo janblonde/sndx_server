@@ -698,7 +698,7 @@ router.get('/factuur', verifyToken, (req,res)=>{
 router.get('/voorschotten', verifyToken, (req,res) => {
   console.log('voorschotten');
 
-  let queryString = "SELECT vo.id, vo.bedrag, pa.naam as partner, vo.omschrijving, vo.datum, vo.vervaldatum, vo.betaald "+
+  let queryString = "SELECT vo.id, vo.bedrag, pa.naam as partner, vo.omschrijving, vo.datum, vo.vervaldatum, vo.betaald, vo.aangemaand "+
                     "FROM voorschotten as vo "+
                     "LEFT OUTER JOIN partners AS pa ON vo.fk_partner = pa.id "+
                     "WHERE vo.fk_gebouw = $1 ORDER BY vo.datum";
@@ -728,6 +728,132 @@ router.get('/openvoorschotten', verifyToken, (req,res) => {
 })
 
 router.post('/voorschotten', verifyToken, async function (req,res){
+
+  //check secret_key
+
+  //loop over gebouwen
+
+  //check datum
+  let today = new Date()
+  console.log(today)
+
+  let month = String(today.getMonth() + 1).padStart(2, '0');
+  console.log(month)
+
+  let description = ""
+
+  switch (month) {
+    case "01":
+      description = "Voorschot januari";
+      break;
+    case "02":
+      description = "Voorschot februari";
+      break;
+    case "03":
+      description = "Voorschot maart";
+      break;
+    case "04":
+      description = "Voorschot april";
+      break;
+    case "05":
+      description = "Voorschot mei";
+      break;
+    case "06":
+      description = "Voorschot juni";
+      break;
+    case "07":
+      description = "Voorschot juli";
+      break;
+    case "08":
+      description = "Voorschot augustus";
+      break;
+    case "09":
+      description = "Voorschot september";
+      break;
+    case "10":
+      description = "Voorschot oktober";
+      break;
+    case "11":
+      description = "Voorschot november";
+      break;
+    case "12":
+      description = "Voorschot december";
+    }
+
+  console.log(description)
+
+  //get units for gebouw
+  const qUnits = "SELECT un.voorschot, un.id, ei.eigenaar FROM units AS un " +
+                 "LEFT OUTER JOIN eigendom as ei ON ei.unit = un.id " +
+                 "WHERE un.fk_gebouw=$1"
+  const rUnits = await pool.query(qUnits, [req.body.fk_gebouw])
+
+  console.log(rUnits.rows)
+
+  for(let element of rUnits.rows){
+    createVoorschot(element.voorschot, description, element.eigenaar, element.id, req.body.fk_gebouw)
+  }
+
+  //call create voorschot function
+    //voorschotbedrag, omschrijving, datum, vervaldatum, fk_partner, fk_unit, gebouwid, type='voorschot'
+
+})
+
+async function createVoorschot(bedrag, omschrijving, fk_partner, fk_unit, fk_gebouw) {
+
+  let today = new Date();
+  let dd = String(today.getDate()).padStart(2, '0');
+  let mm = String(today.getMonth() + 1).padStart(2, '0'); //January is 0!
+  let yyyy = today.getFullYear();
+
+  today = yyyy + '/' + mm + '/' + dd;
+
+  voorschotID = null;
+
+  const results1 = await pool.query("INSERT INTO voorschotten (bedrag, omschrijving, datum, vervaldatum, fk_partner, fk_unit, fk_gebouw, type, betaald) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false ) RETURNING id",
+                [bedrag, omschrijving, today, today, fk_partner, fk_unit, fk_gebouw, 'voorschot']);
+
+  voorschotID = results1.rows[0].id;
+
+  //check voor 1 op 1 match met bankrekeninguittreksels
+  const results2 = await pool.query("SELECT id FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 and bedrag = $2 AND fk_gebouw = $3",
+              [fk_partner, bedrag, fk_gebouw]);
+
+  let match = false;
+  let doublematch = false;
+
+  if(results2.rows[0]){
+    await pool.query("UPDATE voorschotten SET betaald=true WHERE id = $1", [voorschotID]);
+    await pool.query("UPDATE bankrekeninguittreksels SET linked=true WHERE id = $1", [results2.rows[0].id]);
+    await pool.query("INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)", [results2.rows[0].id, voorschotID]);
+    match = true
+  }
+
+  // probeer voorschot te matchen met 2 bankuittreksels
+  if(!match){
+    const results3 = await pool.query("SELECT * FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 AND fk_gebouw = $2",
+                [fk_partner, fk_gebouw]);
+
+    for(let element of results3.rows){
+      if(!doublematch){
+        for(let element2 of results3.rows){
+          if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==req.body.bedrag)&&(element.id!==element2.id)){
+            await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element.id, voorschotID]);
+            await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element2.id, voorschotID]);
+            await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [voorschotID]);
+            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
+            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
+            doublematch = true
+            break;
+          }
+        }
+      }
+    }
+  }
+
+}
+
+router.post('/voorschot', verifyToken, async function (req,res){
 
   voorschotID = null;
 
@@ -2096,12 +2222,23 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
             omschrijving = data[6]
             tegenrekening = data[12]
           }else if(data.length==8){ //FORTIS
-            console.log("fortis")
+            console.log("FORTIS")
             rekeningnummer = data[7]
             datum = data[2]
             bedrag = data[3]
             omschrijving = data[6]
             tegenrekening = data[5]
+          }else if(data.length==11){ //ING
+            console.log("ING")
+            rekeningnummer = data[0]
+            datum = data[4]
+            bedrag = data[6]
+            if(data[9]==""){
+              omschrijving = data[8]
+            }else{
+              omschrijving = data[9]
+            }
+            tegenrekening = data[2]
           }else{
             console.log('onbekend formaat')
           }
