@@ -1040,39 +1040,6 @@ router.get('/leveranciers', verifyToken, (req,res) => {
               })
 })
 
-// router.post('/instellingen', verifyToken, (req, res) => {
-//
-//   const queryString = "INSERT INTO instellingen (adres, periodiciteit_voorschot, dag_voorschot, " +
-//                       "kosten, nieuw, werkrekeningnummer, overgenomen_werkrekening, reserverekeningnummer, " +
-//                       "overgenomen_reserverekening, fk_gebouw) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id"
-//
-//   pool.query(queryString, [req.body.adres, req.body.periodiciteit, req.body.voorschotdag,
-//                             req.body.kosten, req.body.nieuw, req.body.werkrekeningnummer,
-//                             req.body.overgenomen_werkrekening, req.body.reserverekeningnummer,
-//                             req.body.overgenomen_reserverekening, req.gebouw], (error, results) => {
-//                               if(error){
-//                                 console.log(error);
-//                               }else{
-//                                 res.status(200).send(results);
-//                               }
-//                             })
-// })
-
-// router.post('/verbruiken', verifyToken, (req,res) => {
-//   console.log('post verbruiken');
-//
-//   let queryString = "INSERT INTO verbruiken (van, tot, totaalverbruik, afgerekend, fk_type, fk_gebouw) "+
-//                     "VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
-//
-//   pool.query(queryString, [req.body.van, req.body.tot, req.body.totaalverbruik, req.body.afgerekend, req.body.fk_type, req.gebouw], (error, results) => {
-//                 if(error){
-//                   console.log(error);
-//                 }else{
-//                   res.status(200).send(results);
-//                 }
-//               })
-// })
-
 router.post('/verbruikitems', verifyToken, (req,res) => {
   console.log('post verbruikitems');
 
@@ -2412,5 +2379,26 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
       });
 
 });
+
+async function invoiceMatch(fk_partner){
+  //get open invoices for this partner
+
+  //get unlinked uittreksels for this partners
+
+  //loop over invoices
+
+    //loop 1 on 1 matching
+
+      //loop 1 on 2 matching
+
+        //loop 1 on 3 matching
+
+  //loop over uittreksels
+
+    //loop 1 on 2 matching
+
+      //loop 1 on 3 matching
+  
+}
 
 module.exports = router;
