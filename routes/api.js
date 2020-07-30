@@ -6,7 +6,7 @@ const User = require('../models/user');
 const multer = require('multer');
 const path = require('path');
 const csv = require('fast-csv');
-const fs = require('fs');
+//const fs = require('fs');
 const DIR = './downloads';
 const nodemailer = require('nodemailer');
 
