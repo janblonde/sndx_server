@@ -17,6 +17,7 @@ app.get('/',function(req,res){
   res.send('Hello from server')
 })
 
+//add before MTP
 https.createServer({
   key: fs.readFileSync('/etc/ssl/private/www_sndx_be.key'),
   cert: fs.readFileSync('/etc/ssl/certs/www_sndx_be.crt')
