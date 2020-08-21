@@ -810,41 +810,43 @@ async function createVoorschot(bedrag, omschrijving, fk_partner, fk_unit, fk_geb
 
   voorschotID = results1.rows[0].id;
 
-  //check voor 1 op 1 match met bankrekeninguittreksels
-  const results2 = await pool.query("SELECT id FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 and bedrag = $2 AND fk_gebouw = $3",
-              [fk_partner, bedrag, fk_gebouw]);
+  voorschotMatch(0,req,res)
 
-  let match = false;
-  let doublematch = false;
-
-  if(results2.rows[0]){
-    await pool.query("UPDATE voorschotten SET betaald=true WHERE id = $1", [voorschotID]);
-    await pool.query("UPDATE bankrekeninguittreksels SET linked=true WHERE id = $1", [results2.rows[0].id]);
-    await pool.query("INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)", [results2.rows[0].id, voorschotID]);
-    match = true
-  }
-
-  // probeer voorschot te matchen met 2 bankuittreksels
-  if(!match){
-    const results3 = await pool.query("SELECT * FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 AND fk_gebouw = $2",
-                [fk_partner, fk_gebouw]);
-
-    for(let element of results3.rows){
-      if(!doublematch){
-        for(let element2 of results3.rows){
-          if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==req.body.bedrag)&&(element.id!==element2.id)){
-            await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element.id, voorschotID]);
-            await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element2.id, voorschotID]);
-            await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [voorschotID]);
-            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-            doublematch = true
-            break;
-          }
-        }
-      }
-    }
-  }
+  // //check voor 1 op 1 match met bankrekeninguittreksels
+  // const results2 = await pool.query("SELECT id FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 and bedrag = $2 AND fk_gebouw = $3",
+  //             [fk_partner, bedrag, fk_gebouw]);
+  //
+  // let match = false;
+  // let doublematch = false;
+  //
+  // if(results2.rows[0]){
+  //   await pool.query("UPDATE voorschotten SET betaald=true WHERE id = $1", [voorschotID]);
+  //   await pool.query("UPDATE bankrekeninguittreksels SET linked=true WHERE id = $1", [results2.rows[0].id]);
+  //   await pool.query("INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)", [results2.rows[0].id, voorschotID]);
+  //   match = true
+  // }
+  //
+  // // probeer voorschot te matchen met 2 bankuittreksels
+  // if(!match){
+  //   const results3 = await pool.query("SELECT * FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 AND fk_gebouw = $2",
+  //               [fk_partner, fk_gebouw]);
+  //
+  //   for(let element of results3.rows){
+  //     if(!doublematch){
+  //       for(let element2 of results3.rows){
+  //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==req.body.bedrag)&&(element.id!==element2.id)){
+  //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element.id, voorschotID]);
+  //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element2.id, voorschotID]);
+  //           await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [voorschotID]);
+  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
+  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
+  //           doublematch = true
+  //           break;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
 }
 
@@ -857,43 +859,45 @@ router.post('/voorschot', verifyToken, async function (req,res){
 
   voorschotID = results1.rows[0].id;
 
-  //check voor 1 op 1 match met bankrekeninguittreksels
-  const results2 = await pool.query("SELECT id FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 and bedrag = $2 AND fk_gebouw = $3",
-              [req.body.fk_partner, req.body.bedrag, req.gebouw]);
+  voorschotMatch(0,req,res)
 
-  let match = false;
-  let doublematch = false;
+  // //check voor 1 op 1 match met bankrekeninguittreksels
+  // const results2 = await pool.query("SELECT id FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 and bedrag = $2 AND fk_gebouw = $3",
+  //             [req.body.fk_partner, req.body.bedrag, req.gebouw]);
+  //
+  // let match = false;
+  // let doublematch = false;
+  //
+  // if(results2.rows[0]){
+  //   await pool.query("UPDATE voorschotten SET betaald=true WHERE id = $1", [voorschotID]);
+  //   await pool.query("UPDATE bankrekeninguittreksels SET linked=true WHERE id = $1", [results2.rows[0].id]);
+  //   await pool.query("INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)", [results2.rows[0].id, voorschotID]);
+  //   match = true
+  // }
+  //
+  // // probeer voorschot te matchen met 2 bankuittreksels
+  // if(!match){
+  //   const results3 = await pool.query("SELECT * FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 AND fk_gebouw = $2",
+  //               [req.body.fk_partner, req.gebouw]);
+  //
+  //   for(let element of results3.rows){
+  //     if(!doublematch){
+  //       for(let element2 of results3.rows){
+  //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==req.body.bedrag)&&(element.id!==element2.id)){
+  //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element.id, voorschotID]);
+  //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element2.id, voorschotID]);
+  //           await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [voorschotID]);
+  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
+  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
+  //           doublematch = true
+  //           break;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
-  if(results2.rows[0]){
-    await pool.query("UPDATE voorschotten SET betaald=true WHERE id = $1", [voorschotID]);
-    await pool.query("UPDATE bankrekeninguittreksels SET linked=true WHERE id = $1", [results2.rows[0].id]);
-    await pool.query("INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)", [results2.rows[0].id, voorschotID]);
-    match = true
-  }
-
-  // probeer voorschot te matchen met 2 bankuittreksels
-  if(!match){
-    const results3 = await pool.query("SELECT * FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 AND fk_gebouw = $2",
-                [req.body.fk_partner, req.gebouw]);
-
-    for(let element of results3.rows){
-      if(!doublematch){
-        for(let element2 of results3.rows){
-          if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==req.body.bedrag)&&(element.id!==element2.id)){
-            await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element.id, voorschotID]);
-            await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element2.id, voorschotID]);
-            await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [voorschotID]);
-            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-            doublematch = true
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  res.status(200).send(results2);
+  res.status(200).send(results1);
 
 })
 
@@ -934,65 +938,67 @@ router.post('/facturen', verifyToken, async function (req,res){
     }
   }
 
-  //check of deze factuur kan gelinkt worden aan bankuittreksels
-  const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM bankrekeninguittreksels WHERE linked = false AND fk_partner = $1 AND fk_gebouw = $2 ORDER BY datum', [req.body.fk_partner, req.gebouw]);
+  invoiceMatch(0,req,res)
 
-  let match = false;
-  let doublematch = false;
-
-  //loop over niet gelinkte bankrekeninguittreksels voor deze leverancier
-  for(let element of f_result.rows){
-    if(parseFloat(element.bedrag)==-req.body.bedrag){
-      console.log('match')
-      const results2 = await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id,factuurID]);
-      const results3 = await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [factuurID]);
-      const results4 = await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-      match = true;
-      break;
-    }
-  }
-
-  if(!match){
-
-    // loop over over niet gelinkte bankrekeninguittreksels voor deze leverancier en link desgevallend met 2 uittreksels
-    for(let element of f_result.rows){
-      if(!doublematch){
-        for(let element2 of f_result.rows){
-          if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==-req.body.bedrag)&&(element.id!==element2.id)){
-            console.log('double match')
-            await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, factuurID]);
-            await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element2.id, factuurID]);
-            await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [factuurID]);
-            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-            doublematch = true
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  if(!match&&!doublematch) {
-
-    //loop over niet betaalde facturen en link desgevallend de nieuwe factuur met een oude factuur aan 1 uittreksel
-    const f_result2 = await pool.query('SELECT id, bedrag, fk_partner FROM facturen WHERE betaald = false AND fk_partner = $1 AND fk_gebouw = $2 AND id != $3 ORDER BY datum', [req.body.fk_partner, req.gebouw, factuurID]);
-
-    for(let element of f_result.rows){ //uittreksels
-      for(let element2 of f_result2.rows){ //facturen
-        if(req.body.bedrag+parseFloat(element2.bedrag) == -parseFloat(element.bedrag)){
-          console.log('triple match')
-          await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, factuurID]);
-          await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, element2.id]);
-          await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [factuurID]);
-          await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [element2.id]);
-          await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-          break;
-        }
-      }
-    }
-
-  }
+  // //check of deze factuur kan gelinkt worden aan bankuittreksels
+  // const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM bankrekeninguittreksels WHERE linked = false AND fk_partner = $1 AND fk_gebouw = $2 ORDER BY datum', [req.body.fk_partner, req.gebouw]);
+  //
+  // let match = false;
+  // let doublematch = false;
+  //
+  // //loop over niet gelinkte bankrekeninguittreksels voor deze leverancier
+  // for(let element of f_result.rows){
+  //   if(parseFloat(element.bedrag)==-req.body.bedrag){
+  //     console.log('match')
+  //     const results2 = await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id,factuurID]);
+  //     const results3 = await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [factuurID]);
+  //     const results4 = await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
+  //     match = true;
+  //     break;
+  //   }
+  // }
+  //
+  // if(!match){
+  //
+  //   // loop over over niet gelinkte bankrekeninguittreksels voor deze leverancier en link desgevallend met 2 uittreksels
+  //   for(let element of f_result.rows){
+  //     if(!doublematch){
+  //       for(let element2 of f_result.rows){
+  //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==-req.body.bedrag)&&(element.id!==element2.id)){
+  //           console.log('double match')
+  //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, factuurID]);
+  //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element2.id, factuurID]);
+  //           await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [factuurID]);
+  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
+  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
+  //           doublematch = true
+  //           break;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
+  //
+  // if(!match&&!doublematch) {
+  //
+  //   //loop over niet betaalde facturen en link desgevallend de nieuwe factuur met een oude factuur aan 1 uittreksel
+  //   const f_result2 = await pool.query('SELECT id, bedrag, fk_partner FROM facturen WHERE betaald = false AND fk_partner = $1 AND fk_gebouw = $2 AND id != $3 ORDER BY datum', [req.body.fk_partner, req.gebouw, factuurID]);
+  //
+  //   for(let element of f_result.rows){ //uittreksels
+  //     for(let element2 of f_result2.rows){ //facturen
+  //       if(req.body.bedrag+parseFloat(element2.bedrag) == -parseFloat(element.bedrag)){
+  //         console.log('triple match')
+  //         await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, factuurID]);
+  //         await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, element2.id]);
+  //         await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [factuurID]);
+  //         await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [element2.id]);
+  //         await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
+  //         break;
+  //       }
+  //     }
+  //   }
+  //
+  // }
 
   res.status(200).send(results1);
 
@@ -1036,46 +1042,47 @@ router.put('/facturen', verifyToken, async function (req, res) {
 
   //TODO: wat als het kostentype van 'verbruik' naar een ander type gaat?
 
+  invoiceMatch(0,req,res)
 
-  //check of deze aangepaste factuur kan gelinkt worden aan bankuittreksels
-  const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM bankrekeninguittreksels WHERE linked = false AND fk_partner = $1 AND fk_gebouw = $2 ORDER BY datum', [req.body.fk_partner, req.gebouw]);
-
-  let match=false;
-  let doublematch=false;
-
-  //loop over niet gelinkte bankrekeninguittreksels voor deze leverancier
-  for(let element of f_result.rows){
-    if(parseFloat(element.bedrag)==-req.body.bedrag){
-      console.log('match')
-      const results2 = await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id,req.body.id]);
-      const results3 = await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [req.body.id]);
-      const results4 = await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-      match=true
-      break;
-    }
-  }
-
-  if(!match){
-
-    // loop over over niet gelinkte bankrekeninguittreksels voor deze leverancier en link desgevallend met 2 uittreksels
-    for(let element of f_result.rows){
-      if(!doublematch){
-        for(let element2 of f_result.rows){
-
-          if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==-req.body.bedrag)&&(element.id!==element2.id)){
-            console.log('double match')
-            await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, req.body.id]);
-            await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element2.id, req.body.id]);
-            await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [req.body.id]);
-            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-            await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-            doublematch = true
-            break;
-          }
-        }
-      }
-    }
-  }
+  // //check of deze aangepaste factuur kan gelinkt worden aan bankuittreksels
+  // const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM bankrekeninguittreksels WHERE linked = false AND fk_partner = $1 AND fk_gebouw = $2 ORDER BY datum', [req.body.fk_partner, req.gebouw]);
+  //
+  // let match=false;
+  // let doublematch=false;
+  //
+  // //loop over niet gelinkte bankrekeninguittreksels voor deze leverancier
+  // for(let element of f_result.rows){
+  //   if(parseFloat(element.bedrag)==-req.body.bedrag){
+  //     console.log('match')
+  //     const results2 = await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id,req.body.id]);
+  //     const results3 = await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [req.body.id]);
+  //     const results4 = await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
+  //     match=true
+  //     break;
+  //   }
+  // }
+  //
+  // if(!match){
+  //
+  //   // loop over over niet gelinkte bankrekeninguittreksels voor deze leverancier en link desgevallend met 2 uittreksels
+  //   for(let element of f_result.rows){
+  //     if(!doublematch){
+  //       for(let element2 of f_result.rows){
+  //
+  //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==-req.body.bedrag)&&(element.id!==element2.id)){
+  //           console.log('double match')
+  //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, req.body.id]);
+  //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element2.id, req.body.id]);
+  //           await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [req.body.id]);
+  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
+  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
+  //           doublematch = true
+  //           break;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
   res.status(200).send({'status':'OK'})
 
@@ -2422,8 +2429,12 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
       });
     }
 
+    console.log(req.gebouw)
+
     //get rekeningnummers
     const result = await pool.query('SELECT werkrekeningnummer, reserverekeningnummer FROM gebouwen WHERE id = ($1)', [req.gebouw]);
+
+    console.log(result.rows[0])
 
     rekeningnummers = new Map();
     rekeningnummers.set(result.rows[0].werkrekeningnummer, 1);
@@ -2494,124 +2505,6 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
                                                           p_rekeningnummers.get(tegenrekening),
                                                           req.gebouw])
 
-
-            //check of dit een factuur betaald
-            // let fk_partner = p_rekeningnummers.get(tegenrekening);
-            // let betaald_bedrag = parseFloat(bedrag.replace(",","."));
-            //
-            // const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM facturen WHERE betaald = false AND fk_partner = $1 AND fk_gebouw = $2 ORDER BY datum', [fk_partner, req.gebouw]);
-            //
-            // let match = false
-            // let doublematch = false
-
-            // //loop over openstaande facturen voor deze leverancier
-            // for(let element of f_result.rows){
-            //   if(parseFloat(element.bedrag)==-betaald_bedrag){
-            //     console.log('match')
-            //     const results2 = await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[results.rows[0].id,element.id]);
-            //     const results3 = await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [element.id]);
-            //     const results4 = await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [results.rows[0].id]);
-            //     match = true
-            //     break;
-            //   }
-            // }
-            //
-            // if(!match){
-            //   // loop over openstaande facturen en combineer met andere openstaande factuur
-            //   for(let element of f_result.rows){
-            //     if(!doublematch){
-            //       for(let element2 of f_result.rows){
-            //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==-betaald_bedrag)&&(element.id!==element2.id)){
-            //           console.log('double match')
-            //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[results.rows[0].id,element.id]);
-            //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[results.rows[0].id,element2.id]);
-            //           await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [element.id]);
-            //           await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [element2.id]);
-            //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [results.rows[0].id]);
-            //           doublematch = true
-            //           break;
-            //         }
-            //       }
-            //     }
-            //   }
-            // }
-            //
-            // if(!match&&!doublematch){
-            //   //loop over niet gelinkte rekeninguittreksels en check of de combinatie met dit rekeninguittreksel een factuur betaald
-            //   const f_result2 = await pool.query('SELECT id, bedrag, fk_partner FROM bankrekeninguittreksels WHERE linked = false AND fk_partner = $1 AND fk_gebouw = $2 AND id != $3 ORDER BY datum', [fk_partner, req.gebouw, results.rows[0].id]);
-            //
-            //   for(let element of f_result.rows){ //facturen
-            //     for(let element2 of f_result2.rows){ //uittreksels
-            //       if(betaald_bedrag+parseFloat(element2.bedrag)==-parseFloat(element.bedrag)){
-            //         console.log('triple match') //dit uitreksel + ander uittreksel betaald een factuur
-            //         await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[results.rows[0].id,element.id]);
-            //         await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element2.id,element.id]);
-            //         await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [element.id]);
-            //         await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [results.rows[0].id]);
-            //         await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-            //         break;
-            //       }
-            //     }
-            //   }
-            // }
-
-            // //TODO: check of dit een voorschot betaald
-            // const v_result = await pool.query('SELECT id, bedrag, fk_partner FROM voorschotten WHERE betaald = false AND fk_partner = $1 AND fk_gebouw = $2 ORDER BY datum', [fk_partner, req.gebouw]);
-            //
-            // let v_match = false
-            // let v_doublematch = false
-            //
-            // //loop over openstaande voorschotten voor deze eigendaar
-            // for(let element of v_result.rows){
-            //   if(parseFloat(element.bedrag)==betaald_bedrag){
-            //     console.log('voorschot match')
-            //     await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[results.rows[0].id,element.id]);
-            //     await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [element.id]);
-            //     await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [results.rows[0].id]);
-            //     v_match = true
-            //     break;
-            //   }
-            // }
-
-            // if(!v_match){
-            //   // loop over openstaande voorschotten en combineer met andere openstaande voorschot
-            //   for(let element of v_result.rows){
-            //     if(!doublematch){
-            //       for(let element2 of v_result.rows){
-            //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==betaald_bedrag)&&(element.id!==element2.id)){
-            //           console.log('double match')
-            //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[results.rows[0].id,element.id]);
-            //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[results.rows[0].id,element2.id]);
-            //           await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [element.id]);
-            //           await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [element2.id]);
-            //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [results.rows[0].id]);
-            //           doublematch = true
-            //           break;
-            //         }
-            //       }
-            //     }
-            //   }
-            // }
-
-            // if(!match&&!doublematch){
-            //   //loop over niet gelinkte rekeninguittreksels en check of de combinatie met dit rekeninguittreksel een voorschot betaald
-            //   const v_result2 = await pool.query('SELECT id, bedrag, fk_partner FROM bankrekeninguittreksels WHERE linked = false AND fk_partner = $1 AND fk_gebouw = $2 AND id != $3 ORDER BY datum', [fk_partner, req.gebouw, results.rows[0].id]);
-            //
-            //   for(let element of v_result.rows){ //voorschotten
-            //     for(let element2 of v_result2.rows){ //uittreksels
-            //       if(betaald_bedrag+parseFloat(element2.bedrag)==parseFloat(element.bedrag)){
-            //         console.log('triple match') //dit uitreksel + ander uittreksel betaald een factuur
-            //         await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[results.rows[0].id,element.id]);
-            //         await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element2.id,element.id]);
-            //         await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [element.id]);
-            //         await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [results.rows[0].id]);
-            //         await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-            //         break;
-            //       }
-            //     }
-            //   }
-            // }
-
           }
         }
 
@@ -2654,6 +2547,7 @@ async function invoiceMatch(fk_partner, req, res){
                   bank.matched=true
                   bank2.matched=true
                   bank3.matched=true
+                  console.log('part 1A')
                   await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice.id]);
                   await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank.id]);
                   await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank2.id]);
@@ -2673,6 +2567,7 @@ async function invoiceMatch(fk_partner, req, res){
               invoice.matched=true
               bank.matched=true
               bank2.matched=true
+              console.log('part 2A')
               await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice.id]);
               await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank.id]);
               await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank2.id]);
@@ -2687,9 +2582,15 @@ async function invoiceMatch(fk_partner, req, res){
         if(!invoice.matched&&!bank.matched){
           invoice.matched=true
           bank.matched=true
+          console.log('part 3A')
+          console.log(bank.id)
+          console.log(invoice.id)
           await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice.id]);
+          console.log('finish 1')
           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank.id]);
+          console.log('finish 2')
           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[bank.id,invoice.id]);
+          console.log('finish 3')
         }
       }
     }
@@ -2719,6 +2620,7 @@ async function invoiceMatch(fk_partner, req, res){
                   invoice.matched=true
                   invoice2.matched=true
                   invoice3.matched=true
+                  console.log('part 1B')
                   await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank.id]);
                   await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice.id]);
                   await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice2.id]);
@@ -2738,6 +2640,7 @@ async function invoiceMatch(fk_partner, req, res){
               bank.matched=true
               invoice.matched=true
               invoice2.matched=true
+              console.log('part 2B')
               await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank.id]);
               await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice.id]);
               await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice2.id]);
@@ -2752,6 +2655,7 @@ async function invoiceMatch(fk_partner, req, res){
         if(!invoice.matched&&!bank.matched){
           invoice.matched=true
           bank.matched=true
+          console.log('part 3B')
           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank.id]);
           await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice.id]);
           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[bank.id,invoice.id]);
@@ -2797,17 +2701,6 @@ async function voorschotMatch(fk_partner, req, res){
               }
             }
           }
-        }
-
-        if(invoice.id==627){
-          console.log('check')
-          console.log(bank.id)
-          console.log(bank2.id)
-          console.log(parseFloat(invoice.bedrag))
-          console.log(parseFloat(bank.bedrag)+parseFloat(bank2.bedrag))
-          console.log(invoice.matched)
-          console.log(bank.matched)
-          console.log(bank2.matched)
         }
 
         if(bank.id!=bank2.id){
@@ -2863,12 +2756,12 @@ async function voorschotMatch(fk_partner, req, res){
                   invoice2.matched=true
                   invoice3.matched=true
                   await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank.id]);
-                  await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice.id]);
-                  await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice2.id]);
-                  await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice3.id]);
-                  await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[bank.id,invoice.id]);
-                  await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[bank.id,invoice2.id]);
-                  await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[bank.id,invoice3.id]);
+                  await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1',[invoice.id]);
+                  await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1',[invoice2.id]);
+                  await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1',[invoice3.id]);
+                  await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[bank.id,invoice.id]);
+                  await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[bank.id,invoice2.id]);
+                  await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[bank.id,invoice3.id]);
                 }
               }
             }
@@ -2882,10 +2775,10 @@ async function voorschotMatch(fk_partner, req, res){
               invoice.matched=true
               invoice2.matched=true
               await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank.id]);
-              await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice.id]);
-              await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice2.id]);
-              await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[bank.id,invoice.id]);
-              await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[bank.id,invoice2.id]);
+              await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1',[invoice.id]);
+              await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1',[invoice2.id]);
+              await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[bank.id,invoice.id]);
+              await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[bank.id,invoice2.id]);
             }
           }
         }
@@ -2896,8 +2789,8 @@ async function voorschotMatch(fk_partner, req, res){
           invoice.matched=true
           bank.matched=true
           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1',[bank.id]);
-          await pool.query('UPDATE facturen SET betaald = true WHERE id=$1',[invoice.id]);
-          await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[bank.id,invoice.id]);
+          await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1',[invoice.id]);
+          await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[bank.id,invoice.id]);
         }
       }
     }

@@ -18,14 +18,14 @@ app.get('/',function(req,res){
 })
 
 //add before MTP
-https.createServer({
-  key: fs.readFileSync('/etc/ssl/private/www_sndx_be.key'),
-  cert: fs.readFileSync('/etc/ssl/certs/www_sndx_be.crt')
-}, app)
-.listen(PORT, function () {
-  console.log('Server running')
-})
-
-// app.listen(PORT,function(){
+// https.createServer({
+//   key: fs.readFileSync('/etc/ssl/private/www_sndx_be.key'),
+//   cert: fs.readFileSync('/etc/ssl/certs/www_sndx_be.crt')
+// }, app)
+// .listen(PORT, function () {
 //   console.log('Server running')
 // })
+
+app.listen(PORT,function(){
+  console.log('Server running')
+})
