@@ -827,7 +827,7 @@ router.get('/openvoorschotten', verifyToken, (req,res) => {
               })
 })
 
-router.post('/voorschotten', verifyToken, async function (req,res){
+router.post('/voorschotten', async function (req,res){
   console.log('POST voorschotten')
 
   //check secret_key
@@ -899,7 +899,7 @@ router.post('/voorschotten', verifyToken, async function (req,res){
     const rUnits = await pool.query(qUnits, [gebouw.id])
 
     for(let unit of rUnits.rows){
-      createVoorschot(unit.voorschot, description, unit.eigenaar, unit.id, gebouw.id, req, res)
+      createVoorschot(unit.voorschot, description, unit.eigenaar, unit.id, gebouw.id)
     }
   }
 
@@ -920,7 +920,7 @@ router.post('/voorschotten', verifyToken, async function (req,res){
       const rUnits = await pool.query(qUnits, [gebouw.id])
 
       for(let unit of rUnits.rows){
-        createVoorschot(unit.voorschot, descriptionQ, unit.eigenaar, unit.id, gebouw.id, req, res)
+        createVoorschot(unit.voorschot, descriptionQ, unit.eigenaar, unit.id, gebouw.id)
       }
     }
   }
@@ -928,7 +928,7 @@ router.post('/voorschotten', verifyToken, async function (req,res){
   res.status(200).send({'status':'OK'})
 })
 
-async function createVoorschot(bedrag, omschrijving, fk_partner, fk_unit, fk_gebouw, req, res) {
+async function createVoorschot(bedrag, omschrijving, fk_partner, fk_unit, fk_gebouw) {
 
   let today = new Date();
   let dd = String(today.getDate()).padStart(2, '0');
@@ -951,7 +951,7 @@ async function createVoorschot(bedrag, omschrijving, fk_partner, fk_unit, fk_geb
 
   voorschotID = results1.rows[0].id;
 
-  voorschotMatch(0,req,res)
+  voorschotMatch(0,fk_gebouw)
 
   //get eigenaar naam en mailadres
   const qEigenaar = "SELECT naam, email FROM partners WHERE id = $1"
@@ -997,7 +997,7 @@ router.post('/voorschot', verifyToken, async function (req,res){
 
   voorschotID = results1.rows[0].id;
 
-  voorschotMatch(0,req,res)
+  voorschotMatch(0,req.gebouw)
 
   res.status(200).send(results1);
 
@@ -2558,7 +2558,7 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
         }
 
         invoiceMatch(0,req,res)
-        voorschotMatch(0,req,res)
+        voorschotMatch(0,req.gebouw)
 
         fs.unlinkSync(req.file.path);
         return res.sendStatus(200);
@@ -2566,10 +2566,10 @@ router.post('/upload', upload.single('photo'), verifyToken, async function (req,
 
 });
 
-router.get('/invoicematch', verifyToken, async function (req, res) {
-  voorschotMatch(0, req, res)
-  return res.sendStatus(200)
-});
+// router.get('/invoicematch', verifyToken, async function (req, res) {
+//   voorschotMatch(0, req, res)
+//   return res.sendStatus(200)
+// });
 
 async function invoiceMatch(fk_partner, req, res){
   //get open invoices
@@ -2714,14 +2714,14 @@ async function invoiceMatch(fk_partner, req, res){
   }
 }
 
-async function voorschotMatch(fk_partner, req, res){
+async function voorschotMatch(fk_partner, fk_gebouw){
   //get open voorschotten
   let qInvoices = "SELECT * FROM voorschotten WHERE betaald=false AND fk_gebouw=$1 ORDER BY datum"
-  let rInvoices = await pool.query(qInvoices, [req.gebouw])
+  let rInvoices = await pool.query(qInvoices, [fk_gebouw])
 
   //get unlinked uittreksels
   let qBank = "SELECT * FROM bankrekeninguittreksels WHERE linked=false AND fk_gebouw=$1 ORDER BY datum"
-  let rBank = await pool.query(qBank, [req.gebouw])
+  let rBank = await pool.query(qBank, [fk_gebouw])
 
   //loop over invoices
   for(let invoice of rInvoices.rows){
