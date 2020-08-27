@@ -828,6 +828,7 @@ router.get('/openvoorschotten', verifyToken, (req,res) => {
 })
 
 router.post('/voorschotten', verifyToken, async function (req,res){
+  console.log('POST voorschotten')
 
   //check secret_key
 
@@ -973,13 +974,7 @@ async function createVoorschot(bedrag, omschrijving, fk_partner, fk_unit, fk_geb
     from:'info@sndx.be',
     to:rEigenaar.rows[0].email,
     subject:omschrijving + ' ' + rUnit.rows[0].type + ' ' + rUnit.rows[0].naam,
-    text:mailText,
-    // attachments: [
-    //   {
-    //     filename: 'afrekening.pdf',
-    //     path: 'generatedpdfs/A'+req.query.afrekeningID+'_Unit'+unit.naam+'.pdf'
-    //   }
-    // ]
+    text:mailText
   }
 
   transporter.sendMail(options, function(error,info){
