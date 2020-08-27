@@ -14,27 +14,9 @@ const config = require('../config.json');
 
 var each = require('async-each');
 
-//---DATABASE---
-
-// const mongoose = require('mongoose');
-// const db = "mongodb://userjb:pwjb12@ds125342.mlab.com:25342/adb"
-//
-// mongoose.connect(db, err => {
-//   if(err){
-//     console.error('Error' + err)
-//   } else {
-//     console.log('Connected to mongodb')
-//   }
-// })
+//DATABASE SETUP
 
 const Pool = require('pg').Pool
-// const pool = new Pool({
-//   user: 'me',
-//   host: 'localhost',
-//   database: 'api',
-//   password: '',
-//   port: ,
-// })
 
 const pool = new Pool({
   user: config.dbuser,
@@ -44,23 +26,7 @@ const pool = new Pool({
   port: config.dbport,
 })
 
-//---EMAIL---
-
-// const transporter = nodemailer.createTransport({
-//   service: 'gmail',
-//   auth: {
-//     user: config.mailuser,
-//     pass: config.mailpassword
-//   }
-// });
-//
-// const mailOptions = {
-//   from: 'janhendrikblonde@gmail.com',
-//   to: 'jan.blonde@icloud.com',
-//   subject: 'Sending Email using Node.js',
-//   text: 'That was easy!'
-// };
-
+//EMAIL SETUP
 
 const transporter = nodemailer.createTransport({
   host: 'smtp-auth.mailprotect.be',
@@ -129,7 +95,7 @@ router.get('/mail',(req,res)=>{
       console.log(error);
     }else{
       console.log('Email sent: ' + info.response);
-      res.status(200).send('OK');
+      res.status(200).send({'status':'OK'});
     }
   })
 })
@@ -138,10 +104,8 @@ router.post('/register', async function (req, res){
   let userData = req.body
   let user = new User(userData);
   console.log('register');
-  console.log(req.body);
 
   let resultsExisting = await pool.query('SELECT * FROM users WHERE email = $1',[user.email])
-  //console.log(resultsExisting.rows[0])
 
   if(resultsExisting.rows[0]){
 
@@ -151,7 +115,7 @@ router.post('/register', async function (req, res){
 
     let resultsGebouwen = await pool.query('INSERT INTO gebouwen (overgenomen_werkrekening, overgenomen_reserverekening) VALUES (0, 0) RETURNING id')
 
-    let results = await pool.query('INSERT INTO users (email, password, fk_gebouw) VALUES ($1, $2, $3) RETURNING id',
+    let results = await pool.query("INSERT INTO users (email, password, fk_gebouw, role) VALUES ($1, $2, $3, 'nimda') RETURNING id",
                                  [user.email, user.password, resultsGebouwen.rows[0].id]);
 
     await pool.query("INSERT INTO kosten_types (naam, verdeling, fk_gebouw) VALUES ($1,'',$2)", ['electriciteit',resultsGebouwen.rows[0].id]);
@@ -170,9 +134,10 @@ router.post('/register', async function (req, res){
 })
 
 router.post('/login', (req, res) => {
+  console.log('POST login')
   let userData = req.body
 
-  pool.query('SELECT * FROM users WHERE email = $1', [userData.email], (error, results) => {
+  pool.query('SELECT * FROM users WHERE UPPER(email) = UPPER($1)', [userData.email], (error, results) => {
     if (error) {
       console.log(error)
     }else{
@@ -187,6 +152,19 @@ router.post('/login', (req, res) => {
           res.status(200).send({token})
         }
       }
+    }
+  })
+})
+
+router.post('/role', (req, res) =>{
+  console.log('POST role')
+  let userData = req.body
+
+  pool.query('SELECT role FROM users WHERE email = $1', [userData.email], (error, results) =>{
+    if(error){
+      console.log(error)
+    }else{
+      res.status(200).send(results)
     }
   })
 })
@@ -228,7 +206,7 @@ router.get('/resettoken', (req,res) => {
           from:'info@sndx.be',
           to:req.query.email,
           subject:'Paswoord opnieuw instellen',
-          text:'Beste, via volgende link kan je een nieuw paswoord ingeven: http://localhost:4200/passwordreset?code='+OTP,
+          text:'Beste, via volgende link kan je een nieuw paswoord ingeven: https://sndx.be/ngApp/passwordreset?code='+OTP,
         }
 
         transporter.sendMail(content, function(error,info){
@@ -257,6 +235,76 @@ router.put('/resetpassword', (req,res) => {
                     }
                   })
   }
+})
+
+router.post('/invite', verifyToken, (req,res) => {
+  console.log('POST invite')
+
+  let digits = '0123456789aBcdEfGHIj';
+  let OTP = '';
+  for (let i = 0; i < 12; i++ ) {
+      OTP += digits[Math.floor(Math.random() * 20)];
+  }
+
+  let queryString = "INSERT INTO users (email, password, fk_gebouw, reset, role) " +
+                    "VALUES ($1, $2, $3, $4, 'reader') RETURNING id";
+
+  pool.query(queryString, [req.body.email, 'ranDomShizzle64332_;', req.gebouw, OTP], (error, results) =>{
+    if(error){
+       let updateString = "UPDATE users SET reset = $1 WHERE email = $2"
+       pool.query(updateString, [OTP, req.body.email], (error, results) => {
+         if(error){
+           console.log(error)
+         }else{
+           let emailText = "Beste, \n\n" +
+                           "Er is een nieuw account voor u aangemaakt om de gegevens van de VME te kunnen raadplegen.\n\n" +
+                           "Eerst dient u via volgende link een nieuw paswoord in te geven: https://sndx.be/ngApp/passwordreset?code="+OTP + "\n\n" +
+                           "Daarna kan u via https://sndx.be/ngApp/login inloggen op de website, met als E-mail: " + req.body.email + "\n\n" +
+                           "en als paswoord het door u ingegeven paswoord."
+
+           //send mail
+           let content={
+             from:'info@sndx.be',
+             to:req.body.email,
+             subject:'Uw nieuw account op SNDX.be',
+             text:emailText
+           }
+
+           transporter.sendMail(content, function(error,info){
+             if(error){
+               console.log(error);
+             }else{
+               console.log('Email sent: ' + info.response);
+               res.status(200).send({message:'email verzonden'});
+             }})
+
+         }
+       })
+    }else{
+
+        let emailText = "Beste, \n\n" +
+                        "Er is een nieuw account voor u aangemaakt om de gegevens van de VME te kunnen raadplegen.\n\n" +
+                        "Eerst dient u via volgende link een nieuw paswoord in te geven: https://sndx.be/ngApp/passwordreset?code="+OTP + "\n\n" +
+                        "Daarna kan u via https://sndx.be/ngApp/login inloggen op de website, met als E-mail: " + req.body.email + "\n\n" +
+                        "en als paswoord het door u ingegeven paswoord."
+
+        //send mail
+        let content={
+          from:'info@sndx.be',
+          to:req.body.email,
+          subject:'Uw nieuw account op SNDX.be',
+          text:emailText
+        }
+
+        transporter.sendMail(content, function(error,info){
+          if(error){
+            console.log(error);
+          }else{
+            console.log('Email sent: ' + info.response);
+            res.status(200).send({message:'email verzonden'});
+          }})
+    }
+  })
 })
 
 router.post('/units', verifyToken, (req,res) => {
@@ -693,6 +741,60 @@ router.get('/factuur', verifyToken, (req,res)=>{
   })
 })
 
+router.get('/aanmanen', verifyToken, async function (req,res){
+  console.log('aanmanen');
+
+  let qVoorschot = "SELECT vo.bedrag, vo.vervaldatum, pa.naam AS eigenaar, pa.email, un.naam AS eigendom, un.type AS eigendomtype "+
+                   "FROM voorschotten AS vo "+
+                   "LEFT OUTER JOIN partners AS pa ON vo.fk_partner = pa.id "+
+                   "LEFT OUTER JOIN units AS un ON vo.fk_unit = un.id " +
+                   "WHERE vo.id= $1"
+  let rVoorschot = await pool.query(qVoorschot,[req.query.id])
+
+  let myDate = new Date(rVoorschot.rows[0].vervaldatum)
+  let vDag = myDate.getDate()
+  if(vDag.length==1)
+    vDag = '0'+vDag
+  let vMaand = myDate.getMonth()+1
+  if(vMaand.length==1)
+    vMaand = '0'+vMaand
+  let vJaar = myDate.getFullYear()
+  let vervaldatum = vDag + "/" + vMaand + "/" + vJaar
+
+  let mailText = 'Beste ' + rVoorschot.rows[0].eigenaar + '\n\n'+
+                 'Behoudens onze vergissing staat er nog een voorschot open voor een bedrag van ' + rVoorschot.rows[0].bedrag +
+                 '€, met vervaldatum ' + vervaldatum + '.\n' +
+                 'Gelieve dit bedrag binnen 7 dagen over te maken op rekeningnummer XYZ.'
+
+  //send mail
+  let options = {
+    from:'info@sndx.be',
+    to: rVoorschot.rows[0].email,
+    subject:'Aanmaning voorschot ' + rVoorschot.rows[0].eigendomtype + ' ' + rVoorschot.rows[0].eigendom,
+    text:mailText
+  }
+
+  transporter.sendMail(options, function(error,info){
+    if(error){
+      console.log(error);
+    }else{
+      console.log('Email sent: ' + info.response);
+    }
+  })
+
+  let today = new Date();
+  let dd = String(today.getDate()).padStart(2, '0');
+  let mm = String(today.getMonth() + 1).padStart(2, '0'); //January is 0!
+  let yyyy = today.getFullYear();
+
+  today = yyyy + '/' + mm + '/' + dd;
+
+  let qInsertAanmaning = "UPDATE voorschotten SET aangemaand = $1 WHERE id = $2"
+  let rInsertAanmaning = await pool.query(qInsertAanmaning, [today, req.query.id])
+
+  res.status(200).send({'status':'OK'});
+})
+
 router.get('/voorschotten', verifyToken, (req,res) => {
   console.log('voorschotten');
 
@@ -712,7 +814,7 @@ router.get('/voorschotten', verifyToken, (req,res) => {
 router.get('/openvoorschotten', verifyToken, (req,res) => {
   console.log('openvoorschotten');
 
-  let queryString = "SELECT vo.id, vo.bedrag, pa.naam as partner, vo.omschrijving, vo.datum, vo.vervaldatum, vo.betaald "+
+  let queryString = "SELECT vo.id, vo.bedrag, pa.naam as partner, vo.omschrijving, vo.datum, vo.vervaldatum, vo.betaald, vo.aangemaand "+
                     "FROM voorschotten as vo "+
                     "LEFT OUTER JOIN partners AS pa ON vo.fk_partner = pa.id "+
                     "WHERE vo.fk_gebouw = $1 and vo.betaald = false ORDER BY vo.datum";
@@ -729,20 +831,20 @@ router.post('/voorschotten', verifyToken, async function (req,res){
 
   //check secret_key
 
-  //loop over gebouwen
-
   //check datum
   let today = new Date()
-  console.log(today)
-
+  let day = String(today.getDate())
   let month = String(today.getMonth() + 1).padStart(2, '0');
-  console.log(month)
+  let year = String(today.getFullYear())
 
+  //build description
   let description = ""
+  let descriptionQ = ""
 
   switch (month) {
     case "01":
       description = "Voorschot januari";
+      descriptionQ = "Voorschot eerste kwartaal"
       break;
     case "02":
       description = "Voorschot februari";
@@ -752,6 +854,7 @@ router.post('/voorschotten', verifyToken, async function (req,res){
       break;
     case "04":
       description = "Voorschot april";
+      descriptionQ = "Voorschot tweede kwartaal"
       break;
     case "05":
       description = "Voorschot mei";
@@ -761,6 +864,7 @@ router.post('/voorschotten', verifyToken, async function (req,res){
       break;
     case "07":
       description = "Voorschot juli";
+      descriptionQ = "Voorschot derde kwartaal"
       break;
     case "08":
       description = "Voorschot augustus";
@@ -770,6 +874,7 @@ router.post('/voorschotten', verifyToken, async function (req,res){
       break;
     case "10":
       description = "Voorschot oktober";
+      descriptionQ = "Voorschot vierde kwartaal"
       break;
     case "11":
       description = "Voorschot november";
@@ -778,23 +883,51 @@ router.post('/voorschotten', verifyToken, async function (req,res){
       description = "Voorschot december";
     }
 
-  console.log(description)
+  //loop over gebouwen met maandelijkse afrekening
+  const qGebouwen = "SELECT id FROM gebouwen " +
+                    "WHERE setup_complete = true AND periodiciteit_voorschot = '1' AND dag_voorschot = $1"
 
-  //get units for gebouw
-  const qUnits = "SELECT un.voorschot, un.id, ei.eigenaar FROM units AS un " +
-                 "LEFT OUTER JOIN eigendom as ei ON ei.unit = un.id " +
-                 "WHERE un.fk_gebouw=$1"
-  const rUnits = await pool.query(qUnits, [req.body.fk_gebouw])
+  const rGebouwen = await pool.query(qGebouwen, [day])
 
-  console.log(rUnits.rows)
+  for(let gebouw of rGebouwen.rows){
 
-  for(let element of rUnits.rows){
-    createVoorschot(element.voorschot, description, element.eigenaar, element.id, req.body.fk_gebouw)
+    //get units for gebouw
+    const qUnits = "SELECT un.voorschot, un.id, ei.eigenaar FROM units AS un " +
+                   "LEFT OUTER JOIN eigendom as ei ON ei.unit = un.id " +
+                   "WHERE un.fk_gebouw=$1"
+    const rUnits = await pool.query(qUnits, [gebouw.id])
+
+    for(let unit of rUnits.rows){
+      createVoorschot(unit.voorschot, description, unit.eigenaar, unit.id, gebouw.id, req, res)
+    }
   }
 
+  if(month=='01'||month=='04'||month=='07'||month=='10'){
+
+    //loop over gebouwen met driemaandelijkse afrekening
+    qGebouwen = "SELECT id, overnamedatum FROM gebouwen " +
+                "WHERE setup_complete = true AND periodiciteit_voorschot = '3' AND dag_voorschot = $1"
+
+    rGebouwen = await pool.query(qGebouwen, [day])
+
+    for(let gebouw of rGebouwen.rows){
+
+      //get units for gebouw
+      const qUnits = "SELECT un.voorschot, un.id, ei.eigenaar FROM units AS un " +
+                     "LEFT OUTER JOIN eigendom as ei ON ei.unit = un.id " +
+                     "WHERE un.fk_gebouw=$1"
+      const rUnits = await pool.query(qUnits, [gebouw.id])
+
+      for(let unit of rUnits.rows){
+        createVoorschot(unit.voorschot, descriptionQ, unit.eigenaar, unit.id, gebouw.id, req, res)
+      }
+    }
+  }
+
+  res.status(200).send({'status':'OK'})
 })
 
-async function createVoorschot(bedrag, omschrijving, fk_partner, fk_unit, fk_gebouw) {
+async function createVoorschot(bedrag, omschrijving, fk_partner, fk_unit, fk_gebouw, req, res) {
 
   let today = new Date();
   let dd = String(today.getDate()).padStart(2, '0');
@@ -803,50 +936,60 @@ async function createVoorschot(bedrag, omschrijving, fk_partner, fk_unit, fk_geb
 
   today = yyyy + '/' + mm + '/' + dd;
 
+  let today14 = new Date(Date.now() + 12096e5);
+  let dd14 = String(today14.getDate()).padStart(2, '0');
+  let mm14 = String(today14.getMonth() + 1).padStart(2, '0'); //January is 0!
+  let yyyy14 = today14.getFullYear();
+
+  today14 = yyyy14 + '/' + mm14 + '/' + dd14;
+
   voorschotID = null;
 
   const results1 = await pool.query("INSERT INTO voorschotten (bedrag, omschrijving, datum, vervaldatum, fk_partner, fk_unit, fk_gebouw, type, betaald) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false ) RETURNING id",
-                [bedrag, omschrijving, today, today, fk_partner, fk_unit, fk_gebouw, 'voorschot']);
+                [bedrag, omschrijving, today, today14, fk_partner, fk_unit, fk_gebouw, 'voorschot']);
 
   voorschotID = results1.rows[0].id;
 
   voorschotMatch(0,req,res)
 
-  // //check voor 1 op 1 match met bankrekeninguittreksels
-  // const results2 = await pool.query("SELECT id FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 and bedrag = $2 AND fk_gebouw = $3",
-  //             [fk_partner, bedrag, fk_gebouw]);
-  //
-  // let match = false;
-  // let doublematch = false;
-  //
-  // if(results2.rows[0]){
-  //   await pool.query("UPDATE voorschotten SET betaald=true WHERE id = $1", [voorschotID]);
-  //   await pool.query("UPDATE bankrekeninguittreksels SET linked=true WHERE id = $1", [results2.rows[0].id]);
-  //   await pool.query("INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)", [results2.rows[0].id, voorschotID]);
-  //   match = true
-  // }
-  //
-  // // probeer voorschot te matchen met 2 bankuittreksels
-  // if(!match){
-  //   const results3 = await pool.query("SELECT * FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 AND fk_gebouw = $2",
-  //               [fk_partner, fk_gebouw]);
-  //
-  //   for(let element of results3.rows){
-  //     if(!doublematch){
-  //       for(let element2 of results3.rows){
-  //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==req.body.bedrag)&&(element.id!==element2.id)){
-  //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element.id, voorschotID]);
-  //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element2.id, voorschotID]);
-  //           await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [voorschotID]);
-  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-  //           doublematch = true
-  //           break;
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
+  //get eigenaar naam en mailadres
+  const qEigenaar = "SELECT naam, email FROM partners WHERE id = $1"
+  const rEigenaar = await pool.query(qEigenaar, [fk_partner])
+
+  //get unit naam
+  const qUnit = "SELECT naam, type FROM units WHERE id = $1"
+  const rUnit = await pool.query(qUnit, [fk_unit])
+
+  //get werkrekeningnummer van de VME
+  const qGebouw = "SELECT werkrekeningnummer FROM gebouwen WHERE id = $1"
+  const rGebouw = await pool.query(qGebouw, [fk_gebouw])
+
+  let mailText = 'Geachte '+rEigenaar.rows[0].naam+'\n\n'+
+                 'Gelieve het '+omschrijving +' van '+bedrag+' € voor ' + rUnit.rows[0].type + ' ' +rUnit.rows[0].naam+ ' ' +
+                 'over te maken op het rekeningnummer '+rGebouw.rows[0].werkrekeningnummer+ ' van de VME.'
+
+  //send mail
+  let options = {
+    from:'info@sndx.be',
+    to:rEigenaar.rows[0].email,
+    subject:omschrijving + ' ' + rUnit.rows[0].type + ' ' + rUnit.rows[0].naam,
+    text:mailText,
+    // attachments: [
+    //   {
+    //     filename: 'afrekening.pdf',
+    //     path: 'generatedpdfs/A'+req.query.afrekeningID+'_Unit'+unit.naam+'.pdf'
+    //   }
+    // ]
+  }
+
+  transporter.sendMail(options, function(error,info){
+    if(error){
+      console.log(error);
+    }else{
+      console.log('Email sent: ' + info.response);
+      res.status(200).send({'status':'OK'});
+    }
+  })
 
 }
 
@@ -860,42 +1003,6 @@ router.post('/voorschot', verifyToken, async function (req,res){
   voorschotID = results1.rows[0].id;
 
   voorschotMatch(0,req,res)
-
-  // //check voor 1 op 1 match met bankrekeninguittreksels
-  // const results2 = await pool.query("SELECT id FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 and bedrag = $2 AND fk_gebouw = $3",
-  //             [req.body.fk_partner, req.body.bedrag, req.gebouw]);
-  //
-  // let match = false;
-  // let doublematch = false;
-  //
-  // if(results2.rows[0]){
-  //   await pool.query("UPDATE voorschotten SET betaald=true WHERE id = $1", [voorschotID]);
-  //   await pool.query("UPDATE bankrekeninguittreksels SET linked=true WHERE id = $1", [results2.rows[0].id]);
-  //   await pool.query("INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)", [results2.rows[0].id, voorschotID]);
-  //   match = true
-  // }
-  //
-  // // probeer voorschot te matchen met 2 bankuittreksels
-  // if(!match){
-  //   const results3 = await pool.query("SELECT * FROM bankrekeninguittreksels WHERE linked=false and fk_partner = $1 AND fk_gebouw = $2",
-  //               [req.body.fk_partner, req.gebouw]);
-  //
-  //   for(let element of results3.rows){
-  //     if(!doublematch){
-  //       for(let element2 of results3.rows){
-  //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==req.body.bedrag)&&(element.id!==element2.id)){
-  //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element.id, voorschotID]);
-  //           await pool.query('INSERT INTO bank_voorschot (bank_id, voorschot_id) VALUES ($1, $2)',[element2.id, voorschotID]);
-  //           await pool.query('UPDATE voorschotten SET betaald = true WHERE id=$1', [voorschotID]);
-  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-  //           doublematch = true
-  //           break;
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
 
   res.status(200).send(results1);
 
@@ -940,66 +1047,6 @@ router.post('/facturen', verifyToken, async function (req,res){
 
   invoiceMatch(0,req,res)
 
-  // //check of deze factuur kan gelinkt worden aan bankuittreksels
-  // const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM bankrekeninguittreksels WHERE linked = false AND fk_partner = $1 AND fk_gebouw = $2 ORDER BY datum', [req.body.fk_partner, req.gebouw]);
-  //
-  // let match = false;
-  // let doublematch = false;
-  //
-  // //loop over niet gelinkte bankrekeninguittreksels voor deze leverancier
-  // for(let element of f_result.rows){
-  //   if(parseFloat(element.bedrag)==-req.body.bedrag){
-  //     console.log('match')
-  //     const results2 = await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id,factuurID]);
-  //     const results3 = await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [factuurID]);
-  //     const results4 = await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-  //     match = true;
-  //     break;
-  //   }
-  // }
-  //
-  // if(!match){
-  //
-  //   // loop over over niet gelinkte bankrekeninguittreksels voor deze leverancier en link desgevallend met 2 uittreksels
-  //   for(let element of f_result.rows){
-  //     if(!doublematch){
-  //       for(let element2 of f_result.rows){
-  //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==-req.body.bedrag)&&(element.id!==element2.id)){
-  //           console.log('double match')
-  //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, factuurID]);
-  //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element2.id, factuurID]);
-  //           await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [factuurID]);
-  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-  //           doublematch = true
-  //           break;
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
-  //
-  // if(!match&&!doublematch) {
-  //
-  //   //loop over niet betaalde facturen en link desgevallend de nieuwe factuur met een oude factuur aan 1 uittreksel
-  //   const f_result2 = await pool.query('SELECT id, bedrag, fk_partner FROM facturen WHERE betaald = false AND fk_partner = $1 AND fk_gebouw = $2 AND id != $3 ORDER BY datum', [req.body.fk_partner, req.gebouw, factuurID]);
-  //
-  //   for(let element of f_result.rows){ //uittreksels
-  //     for(let element2 of f_result2.rows){ //facturen
-  //       if(req.body.bedrag+parseFloat(element2.bedrag) == -parseFloat(element.bedrag)){
-  //         console.log('triple match')
-  //         await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, factuurID]);
-  //         await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, element2.id]);
-  //         await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [factuurID]);
-  //         await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [element2.id]);
-  //         await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-  //         break;
-  //       }
-  //     }
-  //   }
-  //
-  // }
-
   res.status(200).send(results1);
 
 })
@@ -1043,46 +1090,6 @@ router.put('/facturen', verifyToken, async function (req, res) {
   //TODO: wat als het kostentype van 'verbruik' naar een ander type gaat?
 
   invoiceMatch(0,req,res)
-
-  // //check of deze aangepaste factuur kan gelinkt worden aan bankuittreksels
-  // const f_result = await pool.query('SELECT id, bedrag, fk_partner FROM bankrekeninguittreksels WHERE linked = false AND fk_partner = $1 AND fk_gebouw = $2 ORDER BY datum', [req.body.fk_partner, req.gebouw]);
-  //
-  // let match=false;
-  // let doublematch=false;
-  //
-  // //loop over niet gelinkte bankrekeninguittreksels voor deze leverancier
-  // for(let element of f_result.rows){
-  //   if(parseFloat(element.bedrag)==-req.body.bedrag){
-  //     console.log('match')
-  //     const results2 = await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id,req.body.id]);
-  //     const results3 = await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [req.body.id]);
-  //     const results4 = await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-  //     match=true
-  //     break;
-  //   }
-  // }
-  //
-  // if(!match){
-  //
-  //   // loop over over niet gelinkte bankrekeninguittreksels voor deze leverancier en link desgevallend met 2 uittreksels
-  //   for(let element of f_result.rows){
-  //     if(!doublematch){
-  //       for(let element2 of f_result.rows){
-  //
-  //         if((parseFloat(element.bedrag)+parseFloat(element2.bedrag)==-req.body.bedrag)&&(element.id!==element2.id)){
-  //           console.log('double match')
-  //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element.id, req.body.id]);
-  //           await pool.query('INSERT INTO bank_factuur (bank_id, factuur_id) VALUES ($1, $2)',[element2.id, req.body.id]);
-  //           await pool.query('UPDATE facturen SET betaald = true WHERE id=$1', [req.body.id]);
-  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element.id]);
-  //           await pool.query('UPDATE bankrekeninguittreksels SET linked = true WHERE id=$1', [element2.id]);
-  //           doublematch = true
-  //           break;
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
 
   res.status(200).send({'status':'OK'})
 
@@ -2332,7 +2339,7 @@ router.get('/generatepdf', verifyToken, async function(req,res){
 
     //send mail
     let options = {
-      from:'janhendrikblonde@gmail.com',
+      from:'info@sndx.be',
       to:rOwner.rows[0].email,
       subject:'Afrekening '+unit.naam,
       text:mailText,
@@ -2349,7 +2356,7 @@ router.get('/generatepdf', verifyToken, async function(req,res){
         console.log(error);
       }else{
         console.log('Email sent: ' + info.response);
-        res.status(200).send('OK');
+        res.status(200).send({'status':'OK'});
       }
     })
 
@@ -2405,6 +2412,53 @@ router.get('/latestafrekening', verifyToken, function(req,res){
                 }
               })
 
+})
+
+router.post('/sendmessage', verifyToken, function(req,res){
+  console.log('POST sendmessage')
+  console.log(req.body)
+
+  let mailText = "Beste, \n\n" +
+                 "We ontvingen onderstaande vraag van u, we gaan er zo snel mogelijk mee aan de slag. \n\n" +
+                 "--------- \n\n "+req.body.text
+
+
+  //send mail
+  let options1 = {
+    from:'info@sndx.be',
+    to:req.body.email,
+    subject:'Uw vraag via SNDX.be',
+    text:mailText,
+  }
+
+  transporter.sendMail(options1, function(error,info){
+    if(error){
+      console.log(error);
+    }else{
+      console.log('Email sent: ' + info.response);
+      res.status(200).send({'status':'OK'});
+    }
+  })
+
+  mailText = "Verzender: " + req.body.email + '\n\n' +
+             "Pagina: " + req.body.page + '\n\n' +
+             "Vraag: " + req.body.text + '\n\n'
+
+  let options2 = {
+    from:'info@sndx.be',
+    to:'cindy.keersmaekers@gmail.com',
+    subject:'Vraag om help via SNDX.be',
+    text:mailText,
+  }
+
+  transporter.sendMail(options2, function(error,info){
+    if(error){
+      console.log(error);
+    }else{
+      console.log('Email sent: ' + info.response);
+      res.status(200).send({'status':'OK'});
+    }
+  })
 })
 
 //fileupload
